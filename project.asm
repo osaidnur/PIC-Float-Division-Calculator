@@ -1,29 +1,14 @@
-; ==============================================================================
-; PIC16F877A Division Calculator (Step 2) - 6 Digit Entry with Cursor Movement
-; LCD: PORTD = Data, RB0 = RS, RB2 = E, RB3 = Push Button
-; Clock = 4MHz
-; ==============================================================================
+PROCESSOR 16F877A
+__CONFIG 0x3731
+INCLUDE "P16F877A.INC"
 
-    #include <p16F877A.inc>
-    __CONFIG _FOSC_HS & _WDTE_OFF & _PWRTE_ON & _BOREN_ON & _LVP_OFF & _CPD_OFF & _WRT_OFF & _DEBUG_OFF & _CP_OFF
-
-; --- MACROS ---
-banksel_0 macro
-    bcf STATUS, RP0
-    bcf STATUS, RP1
-    endm
-
-banksel_1 macro
-    bsf STATUS, RP0
-    bcf STATUS, RP1
-    endm
 
 ; --- VARIABLES ---
     CBLOCK 0x20
         delay_ms_count
         blink_counter
         temp_char
-        current_digit_value   ; Binary value of digit (0–9)
+        current_digit_value   ; Binary value of digit (0â€“9)
         digit_cursor_pos      ; Current digit index (0 to 5)
         digit_array0
         digit_array1
@@ -31,222 +16,235 @@ banksel_1 macro
         digit_array3
         digit_array4
         digit_array5
+        digit_array6
+        digit_array7
+        digit_array8
+        digit_array9
+        digit_array10
+        digit_array11
+
     ENDC
 
-; --- PIN DEFINITIONS ---
-LCD_RS      EQU     0
-LCD_E       EQU     2
-LCD_CTRL    EQU     PORTB
-P_BUTTON    EQU     3
+pushButton EQU 0 ;the pin zero of portB
 
-; --- RESET VECTOR ---
-    ORG 0x0000
-    goto start
 
-    ORG 0x0004
-    retfie
+	ORG	0x00		; Default start address 
+	GOTO start		;go to that label....
 
-; ==============================================================================
-; MAIN PROGRAM
-; ==============================================================================
+
+	ORG 0x04
+    GOTO ISR_pushButton       ; Interrupt Service Routine jump
+
+
+;----------------------------------------MAIN-------------------------------------------------------------
 start
-    banksel_1
-    movlw   b'00000000'
-    movwf   TRISD
-    movlw   b'11111000'      ; RB0-2 outputs, RB3 input
-    movwf   TRISB
-    banksel_0
+	NOP			; required for ICD mode
 
-    ; Initialize variables
+	BANKSEL	TRISD
+	MOVLW	B'00000000' 	;1 for input, 0 for output.
+	MOVWF 	TRISD 
+	MOVLW 	B'00000001'		;make the push button as input...
+	MOVWF 	TRISB
+	;this sets all bins in the d port to be output.
+	;the registor of the interupt is in the same bank
+	BANKSEL	OPTION_REG
+    BCF OPTION_REG, INTEDG  ; 0 = interrupt on falling edge
+	BANKSEL INTCON
+	BSF INTCON, INTE    ; Enable external interrupt (RB0/INT) ; it is in the same bank.
+	BSF INTCON, GIE     ; Enable all unmasked interrupts ;If it zero, interupts will be globally disabled.
+	BCF     INTCON, INTF     ; Clear any pending INT interrupt
+
+
+	BANKSEL PORTD 	;go back to bank0 which has the value of the d ports.
+	CLRF PORTD 		;clear all the pins.. set zero as output.
+;----
+	; Initialize variables
     clrf digit_cursor_pos
-    clrf digit_array0
-    clrf digit_array1
-    clrf digit_array2
-    clrf digit_array3
-    clrf digit_array4
-    clrf digit_array5
+    clrf    digit_array0
+    clrf    digit_array1
+    clrf    digit_array2
+    clrf    digit_array3
+    clrf    digit_array4
+    clrf    digit_array5
+    clrf    digit_array6
+    clrf    digit_array7
+    clrf    digit_array8
+    clrf    digit_array9
+    clrf    digit_array10
+    clrf    digit_array11
     clrf current_digit_value
+;-----
+	CALL inid 			;calls inid method to initialize the lcd, this method is inside LCDIS.INC
+  	;then print the welcomming page.....
+	CALL print_welcome
 
-    call lcd_init
-    call display_welcome_message
-
-    ; Blink welcome message 3 times
-    movlw   .3
+	movlw   .3
     movwf   blink_counter
 blink_loop:
-    movlw   0x08
-    call    lcd_cmd
-    call    delay_500ms
-    movlw   0x0C
-    call    lcd_cmd
-    call    delay_500ms
-    decfsz  blink_counter, 1
+	CALL   delay_500ms
+    MOVLW  0x08  				; turns the screen off
+    CALL lcd_cmd
+    CALL   delay_500ms
+	MOVLW  0x0c 				 ; turns the screen on.
+    CALL lcd_cmd				;this is a one blink, off then on
+	decfsz  blink_counter, 1 	;decrement the counter by one, if it zero, skip the next instruction.
     goto    blink_loop
+    
+	;now i want to make a delay of two seconds, then move to the next step.
+	CALL delay_500ms
+	CALL delay_500ms	
+	CALL delay_500ms
+	CALL delay_500ms
+	;---
+	CALL show_the_first_num
+		
+GOTO done
+ INCLUDE "LCDIS.INC"
+;------------------------SUBROTUINE------------------------------------------------------------------------------------
+ISR_pushButton:
 
-    ; Wait 2 seconds
-    call delay_500ms
-    call delay_500ms
-    call delay_500ms
-    call delay_500ms
+	RETFIE
 
-    ; Ready for input
-    movlw   0x01
+
+lcd_data:
+	BSF Select,RS
+	CALL send
+	RETURN
+
+lcd_cmd:
+	BCF Select,RS
+	CALL send
+	RETURN
+
+
+print_welcome:
+	MOVLW 0x80			;LCD command to make the cursor at the 1st line.
+    CALL lcd_cmd        ; Send command to LCD, this subroutine is in LCDIS.INC
+
+	MOVLW 'W'   	 ; Load character to display	 
+    CALL lcd_data       ; Call subroutine to send data to LCD
+
+    MOVLW 'e'    	 ; Load character to display
+    CALL lcd_data        ; Call subroutine to send data to LCD
+
+	MOVLW 'l'    	 ; Load character to display 		 
+    CALL lcd_data        ; Call subroutine to send data to LCD
+
+	MOVLW 'c'    	 ; Load character to display		 
+    CALL lcd_data        ; Call subroutine to send data to LCD
+
+	MOVLW 'o'    	 ; Load character to display	 
+    CALL lcd_data        ; Call subroutine to send data to LCD
+
+	MOVLW 'm'    	 ; Load character to display	 
+    CALL lcd_data        ; Call subroutine to send data to LCD
+
+	MOVLW 'e'    	 ; Load character to display	 
+    CALL lcd_data        ; Call subroutine to send data to LCD
+
+	MOVLW ' '    	 ; Load character to display		 
+    CALL lcd_data        ; Call subroutine to send data to LCD
+
+	MOVLW 't'    	 ; Load character to display	 
+    CALL lcd_data        ; Call subroutine to send data to LCD
+
+	MOVLW 'o'    	 ; Load character to display
+    CALL lcd_data        ; Call subroutine to send data to LCD
+
+
+	MOVLW 0xc0			;LCD command to make the cursor at the 2st line.
+    CALL lcd_cmd       ; Send command to LCD, this subroutine is in LCDIS.INC
+
+	MOVLW 'D'   	 ; Load character to display
+    CALL lcd_data        ; Call subroutine to send data to LCD
+
+    MOVLW 'i'    	 ; Load character to display 		 
+    CALL lcd_data        ; Call subroutine to send data to LCD
+
+	MOVLW 'v'    	 ; Load character to display	 
+    CALL lcd_data        ; Call subroutine to send data to LCD
+
+	MOVLW 'i'    	 ; Load character to display		 
+    CALL lcd_data        ; Call subroutine to send data to LCD
+
+	MOVLW 'o'    	 ; Load character to display		 
+    CALL lcd_data        ; Call subroutine to send data to LCD
+
+	MOVLW 'n'    	 ; Load character to display		 
+    CALL lcd_data        ; Call subroutine to send data to LCD
+RETURN
+
+show_the_first_num:
+	movlw   0x01
     call    lcd_cmd
     movlw   0x0F          ; Cursor ON, Blink ON
     call    lcd_cmd
+	
+	MOVLW 'N'   	 ; Load character to display	 
+    CALL lcd_data       ; Call subroutine to send data to LCD
+	
+	MOVLW 'u'   	 ; Load character to display	 
+    CALL lcd_data       ; Call subroutine to send data to LCD
+	MOVLW 'm'   	 ; Load character to display	 
+    CALL lcd_data       ; Call subroutine to send data to LCD
+	MOVLW 'b'   	 ; Load character to display	 
+    CALL lcd_data       ; Call subroutine to send data to LCD
+	MOVLW 'e'   	 ; Load character to display	 
+    CALL lcd_data       ; Call subroutine to send data to LCD
+	MOVLW 'r'   	 ; Load character to display	 
+    CALL lcd_data       ; Call subroutine to send data to LCD
+	MOVLW ' '   	 ; Load character to display	 
+    CALL lcd_data       ; Call subroutine to send data to LCD
+	MOVLW '1'   	 ; Load character to display	 
+    CALL lcd_data       ; Call subroutine to send data to LCD
+	MOVLW 0xc0
+	CALL lcd_cmd
+	
+	CALL display_all_digits
+	RETURN
 
-    call display_number_1_prompt
-    call display_all_digits
-    call position_cursor
-
-; ==============================================================================
-; MAIN LOOP
-; ==============================================================================
-digit_entry_loop:
-    btfss   PORTB, P_BUTTON
-    goto    digit_entry_loop
-    call    debounce
-    btfss   PORTB, P_BUTTON
-    goto    digit_entry_loop
-
-    ; Read current digit value from array
-    movf    digit_cursor_pos, 0
-    addwf   PCL, f
-    goto    get0
-    goto    get1
-    goto    get2
-    goto    get3
-    goto    get4
-    goto    get5
-
-get0: movf digit_array0, 0
-      movwf current_digit_value
-      goto inc_digit
-get1: movf digit_array1, 0
-      movwf current_digit_value
-      goto inc_digit
-get2: movf digit_array2, 0
-      movwf current_digit_value
-      goto inc_digit
-get3: movf digit_array3, 0
-      movwf current_digit_value
-      goto inc_digit
-get4: movf digit_array4, 0
-      movwf current_digit_value
-      goto inc_digit
-get5: movf digit_array5, 0
-      movwf current_digit_value
-      goto inc_digit
-
-; --- INCREMENT DIGIT ---
-inc_digit:
-    movf    current_digit_value, 0
-    sublw   9
-    btfsc   STATUS, Z
-    goto    roll_to_zero
-
-    incf    current_digit_value, 1
-    goto    store_back
-
-roll_to_zero:
-    clrf    current_digit_value
-    ; Move cursor to next digit if not at the last digit
-    movf    digit_cursor_pos, 0
-    sublw   5
-    btfsc   STATUS, Z
-    goto    store_back
-    incf    digit_cursor_pos, 1
-
-store_back:
-    ; Store updated digit back into array
-    movf    digit_cursor_pos, 0
-    addwf   PCL, f
-    goto    put0
-    goto    put1
-    goto    put2
-    goto    put3
-    goto    put4
-    goto    put5
-
-put0: movf current_digit_value, 0
-      movwf digit_array0
-      goto refresh_display
-put1: movf current_digit_value, 0
-      movwf digit_array1
-      goto refresh_display
-put2: movf current_digit_value, 0
-      movwf digit_array2
-      goto refresh_display
-put3: movf current_digit_value, 0
-      movwf digit_array3
-      goto refresh_display
-put4: movf current_digit_value, 0
-      movwf digit_array4
-      goto refresh_display
-put5: movf current_digit_value, 0
-      movwf digit_array5
-      goto refresh_display
-
-refresh_display:
-    call display_all_digits
-    call position_cursor
-    goto wait_for_release
-
-wait_for_release:
-    btfsc PORTB, P_BUTTON
-    goto wait_for_release
-    call debounce
-    goto digit_entry_loop
-
-; ==============================================================================
-; SUBROUTINES
-; ==============================================================================
-
-display_number_1_prompt:
-    movlw   0x80
-    call    lcd_cmd
-    movlw   'N'
-    call    lcd_write
-    movlw   'u'
-    call    lcd_write
-    movlw   'm'
-    call    lcd_write
-    movlw   'b'
-    call    lcd_write
-    movlw   'e'
-    call    lcd_write
-    movlw   'r'
-    call    lcd_write
-    movlw   ' '
-    call    lcd_write
-    movlw   '1'
-    call    lcd_write
-    movlw   0xC0
-    call    lcd_cmd
-    return
 
 display_all_digits:
-    movlw   0xC0
-    call    lcd_cmd
-    movf    digit_array0, 0
+  	movf    digit_array0, 0
     addlw   '0'
-    call    lcd_write
+    call    lcd_data
     movf    digit_array1, 0
     addlw   '0'
-    call    lcd_write
+    call    lcd_data
     movf    digit_array2, 0
     addlw   '0'
-    call    lcd_write
+    call    lcd_data
     movf    digit_array3, 0
     addlw   '0'
-    call    lcd_write
+    call    lcd_data
     movf    digit_array4, 0
     addlw   '0'
-    call    lcd_write
+    call    lcd_data
     movf    digit_array5, 0
     addlw   '0'
-    call    lcd_write
-    return
+    call    lcd_data
+	MOVLW '.'
+	CALL lcd_data
+    movf    digit_array6, 0
+    addlw   '0'
+    call    lcd_data
+    movf    digit_array7, 0
+    addlw   '0'
+    call    lcd_data
+    movf    digit_array8, 0
+    addlw   '0'
+    call    lcd_data
+    movf    digit_array9, 0
+    addlw   '0'
+    call    lcd_data
+    movf    digit_array10, 0
+    addlw   '0'
+    call    lcd_data
+    movf    digit_array11, 0
+    addlw   '0'
+    call    lcd_data
+    RETURN
+
 
 position_cursor:
     movf    digit_cursor_pos, 0
@@ -254,92 +252,8 @@ position_cursor:
     call    lcd_cmd
     return
 
-display_welcome_message:
-    movlw   0x80
-    call    lcd_cmd
-    movlw   'W'
-    call    lcd_write
-    movlw   'e'
-    call    lcd_write
-    movlw   'l'
-    call    lcd_write
-    movlw   'c'
-    call    lcd_write
-    movlw   'o'
-    call    lcd_write
-    movlw   'm'
-    call    lcd_write
-    movlw   'e'
-    call    lcd_write
-    movlw   ' '
-    call    lcd_write
-    movlw   't'
-    call    lcd_write
-    movlw   'o'
-    call    lcd_write
-    movlw   0xC0
-    call    lcd_cmd
-    movlw   'D'
-    call    lcd_write
-    movlw   'i'
-    call    lcd_write
-    movlw   'v'
-    call    lcd_write
-    movlw   'i'
-    call    lcd_write
-    movlw   's'
-    call    lcd_write
-    movlw   'i'
-    call    lcd_write
-    movlw   'o'
-    call    lcd_write
-    movlw   'n'
-    call    lcd_write
-    return
 
-lcd_init:
-    call delay_20ms
-    movlw 0x38
-    call lcd_cmd
-    call delay_5ms
-    movlw 0x38
-    call lcd_cmd
-    call delay_1ms
-    movlw 0x38
-    call lcd_cmd
-    movlw 0x0F    ; Cursor ON, Blink ON
-    call lcd_cmd
-    movlw 0x01
-    call lcd_cmd
-    movlw 0x06
-    call lcd_cmd
-    return
-
-lcd_cmd:
-    movwf PORTD
-    bcf LCD_CTRL, LCD_RS
-    call lcd_pulse_e
-    call delay_1ms
-    return
-
-lcd_write:
-    movwf PORTD
-    bsf LCD_CTRL, LCD_RS
-    call lcd_pulse_e
-    call delay_1ms
-    return
-
-lcd_pulse_e:
-    bsf LCD_CTRL, LCD_E
-    nop
-    nop
-    bcf LCD_CTRL, LCD_E
-    return
-
-debounce:
-    movlw .50
-    call delay_ms
-    return
+;------------------------------------------------------------------------
 
 delay_500ms:
     movlw .250
@@ -375,4 +289,12 @@ us_loop:
     goto ms_loop
     return
 
-    END
+
+
+
+
+
+done:
+    SLEEP
+    GOTO done
+END
