@@ -8,3 +8,8 @@ project.o
 project.mcs
 myproject.mcs
 myproject.mcw
+pic2.err
+pic2.lst
+pic2.o
+slave.cof
+slave.map

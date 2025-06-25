@@ -37,6 +37,9 @@ INCLUDE "P16F877A.INC"
         timer1_enabled        ; Flag to track if Timer1 is enabled
         button_first_press    ; Flag to track first button press
         screen1
+        ; USART variables for communication with slave PIC
+        transmit_index        ; Index for transmitting digits (0-11)
+        number_transmitted    ; Flag to track if first number was transmitted
 
     ENDC
 
@@ -62,6 +65,15 @@ start
 	MOVWF 	TRISB
 	;this sets all bins in the d port to be output.
 	;the registor of the interupt is in the same bank	
+    
+    ; Configure USART pins for communication with slave PIC
+    ; USART = Universal Synchronous Asynchronous Receiver Transmitter
+    ; RC6 = TX (Transmit) pin - sends data to slave PIC
+    ; RC7 = RX (Receive) pin - receives data from slave PIC
+    BANKSEL TRISC
+    BCF     TRISC, 6        ; RC6/TX pin as output (transmit to slave)
+    BSF     TRISC, 7        ; RC7/RX pin as input (receive from slave)
+    
     BANKSEL	OPTION_REG
     BCF OPTION_REG, INTEDG  ; 0 = interrupt on falling edge
 	
@@ -77,6 +89,9 @@ start
 	BANKSEL PIR1
 	BCF PIR1, TMR1IF    ; Clear Timer1 interrupt flag
 
+    ; Initialize USART for communication with slave PIC
+    ; This sets up the hardware for serial communication
+    CALL    init_master_usart
 
 	BANKSEL PORTD 	;go back to bank0 which has the value of the d ports.
 	CLRF PORTD 		;clear all the pins.. set zero as output.
@@ -111,6 +126,9 @@ start
     clrf    timer1_enabled      ; Timer1 not enabled initially
     clrf    button_first_press  ; No button press detected yet
     clrf    screen1
+    ; Initialize USART variables
+    clrf    transmit_index      ; Start transmitting from first digit
+    clrf    number_transmitted  ; First number not transmitted yet
 ;-----
 	CALL    inid 			;calls inid method to initialize the lcd, this method is inside LCDIS.INC
   	;then print the welcomming page.....
@@ -177,26 +195,30 @@ ISR_pushButton:
 
 shortPulse:
     ; Increment the digit at current cursor position
-    movwf 1
-    subwf screen1,0
-    btfss STATUS, Z ; Check if this is the first press
-    ;if we are in the first screen.    
+    movlw   .1
+    subwf   screen1, 0
+    btfss   STATUS, Z ; Check if this is the first screen
+    goto    screen1_increment
+    ; else we are in screen 2
+    call    increment_current_digit_2 ; Increment the digit at current cursor position
+    goto    point1
+screen1_increment:
     call    increment_current_digit_1
-    goto point1
-    ;else
-    call   increment_current_digit_2 ; Increment the digit at current cursor position
     ; Update the display to show the new digit
 
 point1:
-    movwf   1
-    subwf   screen1,0
-    btfss   STATUS, Z ; Check if this is the first press
+    movlw   .1
+    subwf   screen1, 0
+    btfss   STATUS, Z ; Check if this is the first screen
+    goto    screen1_display
+    ; else we are in screen 2
+    call    update_single_digit_display_2 ; Update the display to show the new digit
+    goto    isr_exit ; Exit ISR after updating display
+screen1_display:
     call    update_single_digit_display_1
     goto    isr_exit ; Exit ISR after updating display
-    call    update_single_digit_display_2 ; Update the display to show the new digit
-    goto     isr_exit ; Exit ISR after updating display
 
-longPulse
+longPulse:
     ;move the cursor to the next digit
     incf    digit_cursor_pos, 1 ; Move to next digit
     ; If the cursor position exceeds the last digit, move to NUMBER 2.
@@ -209,17 +231,19 @@ longPulse
     movlw   0x0D                ; Last digit position (12)
     subwf   digit_cursor_pos, 0 ; Check if cursor exceeds last digit
     btfsc   STATUS, Z           ; If cursor is at last digit, do nothing for now.
-    CALL show_the_second_num ;i want to fix it after, i want to make it go to the second number.; need to check also
+    CALL show_the_second_num_and_transmit ;i want to fix it after, i want to make it go to the second number.; need to check also
     ;if i'm in the second screen don't print the second num, no, calculate the result and print it.
     ;else update the display, then exit
 
-
-    movwf   1
-    subwf   screen1,0
-    btfss   STATUS, Z ; Check if this is the first press
-    call    update_single_digit_display_1 ; Update display with new digit
-    goto    isr_exit ; Exit ISR after updating display
+    movlw   .1
+    subwf   screen1, 0
+    btfss   STATUS, Z ; Check if this is the first screen
+    goto    screen1_cursor
+    ; else we are in screen 2
     call    update_single_digit_display_2 ; Update display with new digit
+    goto    isr_exit ; Exit ISR after updating display
+screen1_cursor:
+    call    update_single_digit_display_1 ; Update display with new digit
     ; Reposition cursor for blinking
 isr_exit:
     ; Restore W register context
@@ -600,4 +624,92 @@ delay_300ms:
 done:
     SLEEP
     GOTO done
+
+;----------------------------------------USART COMMUNICATION SUBROUTINES-------------------------------------------------------------
+
+init_master_usart:
+    ; Initialize USART for 9600 baud rate communication
+    ; USART allows two PICs to communicate by sending data one byte at a time
+    ; 9600 baud = 9600 bits per second (standard speed for PIC communication)
+    
+    BANKSEL SPBRG
+    MOVLW   .25             ; Baud rate generator value for 9600 baud at 4MHz crystal
+    MOVWF   SPBRG           ; Set the communication speed
+    
+    BANKSEL TXSTA
+    BCF     TXSTA, SYNC     ; Use asynchronous mode (no clock signal needed)
+    BSF     TXSTA, TXEN     ; Enable the transmitter hardware
+    
+    BANKSEL RCSTA  
+    BSF     RCSTA, SPEN     ; Enable the serial port hardware
+    
+    RETURN
+
+show_the_second_num_and_transmit:
+    ; This function does two things:
+    ; 1. Shows the second number input screen
+    ; 2. Transmits the first number to slave PIC via USART
+    
+    ; First, check if we haven't transmitted the first number yet
+    MOVF    number_transmitted, 0
+    SUBLW   .0                      ; Check if number_transmitted == 0
+    BTFSS   STATUS, Z               ; If not zero, skip transmission
+    GOTO    just_show_second_num    ; Already transmitted, just show second number
+    
+    ; Transmit the first number to slave PIC
+    CALL    transmit_first_number_to_slave
+    
+    ; Mark that we've transmitted the first number
+    MOVLW   .1
+    MOVWF   number_transmitted
+    
+just_show_second_num:
+    CALL    show_the_second_num     ; Show the second number input screen
+    RETURN
+
+transmit_first_number_to_slave:
+    ; This function sends all 12 digits of the first number to the slave PIC
+    ; Each digit is sent as a separate byte through USART
+    
+    CLRF    transmit_index          ; Start from first digit (index 0)
+    
+transmit_loop:
+    ; Get the current digit to transmit using indirect addressing
+    MOVF    transmit_index, 0
+    ADDLW   digit_array1_0          ; Calculate address of digit
+    MOVWF   FSR                     ; Point FSR to the digit
+    MOVF    INDF, 0                 ; Get the digit value (0-9)
+    
+    ; Send this digit to slave PIC
+    CALL    usart_send_byte
+    
+    ; Small delay between transmissions to ensure slave can process
+    CALL    delay_5ms
+    
+    ; Move to next digit
+    INCF    transmit_index, 1
+    
+    ; Check if we sent all 12 digits
+    MOVF    transmit_index, 0
+    SUBLW   .12                     ; Compare with 12
+    BTFSS   STATUS, Z               ; If not equal to 12, continue
+    GOTO    transmit_loop           ; Send next digit
+    
+    RETURN
+
+usart_send_byte:
+    ; This function sends one byte (the digit in W register) to slave PIC
+    ; W register contains the digit value (0-9) to send
+    
+    BANKSEL TXSTA
+    BTFSS   TXSTA, TRMT            ; Check if transmit register is empty
+    GOTO    $-1                    ; Wait until transmit register is empty
+    
+    BANKSEL TXREG
+    MOVWF   TXREG                  ; Put the digit into transmit register
+                                   ; Hardware automatically sends it to slave PIC
+    
+    RETURN
+
+;------------------------------------------------------------------------
 END
