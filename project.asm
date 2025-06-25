@@ -162,7 +162,7 @@ ISR_pushButton:
     ; Clear the interrupt flag to avoid re-entering the ISR immediately
     BCF     INTCON, INTF
     
-    
+
     ; Simple debounce
     call    debounce
     ; Check if button is still pressed (active low)
