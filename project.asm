@@ -40,6 +40,7 @@ INCLUDE "P16F877A.INC"
         ; USART variables for communication with slave PIC
         transmit_index        ; Index for transmitting digits (0-11)
         number_transmitted    ; Flag to track if first number was transmitted
+        second_number_transmitted ; Flag to track if second number was transmitted
 
     ENDC
 
@@ -129,6 +130,7 @@ start
     ; Initialize USART variables
     clrf    transmit_index      ; Start transmitting from first digit
     clrf    number_transmitted  ; First number not transmitted yet
+    clrf    second_number_transmitted ; Second number not transmitted yet
 ;-----
 	CALL    inid 			;calls inid method to initialize the lcd, this method is inside LCDIS.INC
   	;then print the welcomming page.....
@@ -228,11 +230,10 @@ longPulse:
     btfsc   STATUS, Z           ; If cursor is at decimal point (Z==1), increment again, if z=0 (sub res is not 0) skip.
     incf    digit_cursor_pos, 1 ; Skip decimal point
     ; If the cursor position exceeds the last digit, do job that i will do later.
-    movlw   0x0D                ; Last digit position (12)
+    movlw   0x0C                ; Last digit position (12)
     subwf   digit_cursor_pos, 0 ; Check if cursor exceeds last digit
-    btfsc   STATUS, Z           ; If cursor is at last digit, do nothing for now.
-    CALL show_the_second_num_and_transmit ;i want to fix it after, i want to make it go to the second number.; need to check also
-    ;if i'm in the second screen don't print the second num, no, calculate the result and print it.
+    btfsc   STATUS, Z           ; If cursor is at last digit position
+    CALL    handle_cursor_overflow ; Handle what happens when cursor goes beyond last digit
     ;else update the display, then exit
 
     movlw   .1
@@ -708,6 +709,178 @@ usart_send_byte:
     BANKSEL TXREG
     MOVWF   TXREG                  ; Put the digit into transmit register
                                    ; Hardware automatically sends it to slave PIC
+    
+    RETURN
+
+;------------------------------------------------------------------------
+handle_cursor_overflow:
+    ; This function handles what happens when cursor goes beyond the last digit
+    ; If we're in screen 1 (first number), move to screen 2 and transmit first number
+    ; If we're in screen 2 (second number), transmit second number and show result/reset
+    
+    MOVF    screen1, 0
+    SUBLW   .0                      ; Check if screen1 == 0 (first screen)
+    BTFSC   STATUS, Z               ; If Z=1, we're in first screen
+    GOTO    move_to_second_screen   ; Move to second number screen
+    
+    ; We're in second screen, transmit second number
+    CALL    transmit_second_number_to_slave
+    
+    ; Show completion message or reset for new calculation
+    CALL    show_transmission_complete
+    GOTO    cursor_overflow_exit
+    
+move_to_second_screen:
+    ; Move from first to second number screen
+    CALL    show_the_second_num_and_transmit
+    
+cursor_overflow_exit:
+    RETURN
+
+transmit_second_number_to_slave:
+    ; This function sends all 12 digits of the second number to the slave PIC
+    ; Each digit is sent as a separate byte through USART
+    
+    ; Check if we already transmitted the second number
+    MOVF    second_number_transmitted, 0
+    SUBLW   .0                      ; Check if second_number_transmitted == 0
+    BTFSS   STATUS, Z               ; If not zero, skip transmission
+    RETURN                          ; Already transmitted, exit
+    
+    CLRF    transmit_index          ; Start from first digit (index 0)
+    
+transmit_second_loop:
+    ; Get the current digit to transmit using indirect addressing
+    MOVF    transmit_index, 0
+    ADDLW   digit_array2_0          ; Calculate address of second number digit
+    MOVWF   FSR                     ; Point FSR to the digit
+    MOVF    INDF, 0                 ; Get the digit value (0-9)
+    
+    ; Send this digit to slave PIC
+    CALL    usart_send_byte
+    
+    ; Small delay between transmissions to ensure slave can process
+    CALL    delay_5ms
+    
+    ; Move to next digit
+    INCF    transmit_index, 1
+    
+    ; Check if we sent all 12 digits
+    MOVF    transmit_index, 0
+    SUBLW   .12                     ; Compare with 12
+    BTFSS   STATUS, Z               ; If not equal to 12, continue
+    GOTO    transmit_second_loop    ; Send next digit
+    
+    ; Mark that we've transmitted the second number
+    MOVLW   .1
+    MOVWF   second_number_transmitted
+    
+    RETURN
+
+show_transmission_complete:
+    ; Display a message indicating both numbers have been transmitted
+    MOVLW   0x01            ; Clear display
+    CALL    lcd_cmd
+    
+    MOVLW   0x80            ; Position cursor at first line
+    CALL    lcd_cmd
+    
+    ; Display "TRANSMISSION"
+    MOVLW   'T'
+    CALL    lcd_data
+    MOVLW   'R'
+    CALL    lcd_data
+    MOVLW   'A'
+    CALL    lcd_data
+    MOVLW   'N'
+    CALL    lcd_data
+    MOVLW   'S'
+    CALL    lcd_data
+    MOVLW   'M'
+    CALL    lcd_data
+    MOVLW   'I'
+    CALL    lcd_data
+    MOVLW   'S'
+    CALL    lcd_data
+    MOVLW   'S'
+    CALL    lcd_data
+    MOVLW   'I'
+    CALL    lcd_data
+    MOVLW   'O'
+    CALL    lcd_data
+    MOVLW   'N'
+    CALL    lcd_data
+    
+    MOVLW   0xC0            ; Position cursor at second line
+    CALL    lcd_cmd
+    
+    MOVLW   'C'
+    CALL    lcd_data
+    MOVLW   'O'
+    CALL    lcd_data
+    MOVLW   'M'
+    CALL    lcd_data
+    MOVLW   'P'
+    CALL    lcd_data
+    MOVLW   'L'
+    CALL    lcd_data
+    MOVLW   'E'
+    CALL    lcd_data
+    MOVLW   'T'
+    CALL    lcd_data
+    MOVLW   'E'
+    CALL    lcd_data
+    MOVLW   '!'
+    CALL    lcd_data
+    
+    ; Wait 3 seconds then restart
+    CALL    delay_500ms
+    CALL    delay_500ms
+    CALL    delay_500ms
+    CALL    delay_500ms
+    CALL    delay_500ms
+    CALL    delay_500ms
+    
+    ; Reset for new calculation
+    CALL    reset_for_new_calculation
+    
+    RETURN
+
+reset_for_new_calculation:
+    ; Reset all variables for a new calculation
+    CLRF    digit_cursor_pos
+    CLRF    screen1
+    CLRF    number_transmitted
+    CLRF    second_number_transmitted
+    
+    ; Clear all digit arrays
+    CLRF    digit_array1_0
+    CLRF    digit_array1_1
+    CLRF    digit_array1_2
+    CLRF    digit_array1_3
+    CLRF    digit_array1_4
+    CLRF    digit_array1_5
+    CLRF    digit_array1_6
+    CLRF    digit_array1_7
+    CLRF    digit_array1_8
+    CLRF    digit_array1_9
+    CLRF    digit_array1_10
+    CLRF    digit_array1_11
+    CLRF    digit_array2_0
+    CLRF    digit_array2_1
+    CLRF    digit_array2_2
+    CLRF    digit_array2_3
+    CLRF    digit_array2_4
+    CLRF    digit_array2_5
+    CLRF    digit_array2_6
+    CLRF    digit_array2_7
+    CLRF    digit_array2_8
+    CLRF    digit_array2_9
+    CLRF    digit_array2_10
+    CLRF    digit_array2_11
+    
+    ; Show first number screen again
+    CALL    show_the_first_num
     
     RETURN
 

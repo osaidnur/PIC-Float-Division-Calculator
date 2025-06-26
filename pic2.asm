@@ -7,19 +7,33 @@ INCLUDE "P16F877A.INC"
         temp_char
         received_digit      ; Single digit received from master
         digit_index         ; Index for storing received digits (0-11)
-        ; Array to store the received 12-digit number
-        slave_digit_array_0
-        slave_digit_array_1
-        slave_digit_array_2
-        slave_digit_array_3
-        slave_digit_array_4
-        slave_digit_array_5
-        slave_digit_array_6
-        slave_digit_array_7
-        slave_digit_array_8
-        slave_digit_array_9
-        slave_digit_array_10
-        slave_digit_array_11
+        current_number      ; Track which number we're receiving (1 or 2)
+        ; Array to store the received first 12-digit number
+        slave_digit_array1_0
+        slave_digit_array1_1
+        slave_digit_array1_2
+        slave_digit_array1_3
+        slave_digit_array1_4
+        slave_digit_array1_5
+        slave_digit_array1_6
+        slave_digit_array1_7
+        slave_digit_array1_8
+        slave_digit_array1_9
+        slave_digit_array1_10
+        slave_digit_array1_11
+        ; Array to store the received second 12-digit number
+        slave_digit_array2_0
+        slave_digit_array2_1
+        slave_digit_array2_2
+        slave_digit_array2_3
+        slave_digit_array2_4
+        slave_digit_array2_5
+        slave_digit_array2_6
+        slave_digit_array2_7
+        slave_digit_array2_8
+        slave_digit_array2_9
+        slave_digit_array2_10
+        slave_digit_array2_11
     ENDC
 
     ORG 0x00            ; Reset vector
@@ -93,7 +107,7 @@ USART_ISR:
     MOVF    digit_index, 0
     SUBLW   .12             ; Compare with 12
     BTFSC   STATUS, Z       ; If we received 12 digits
-    CALL    display_complete_number
+    CALL    handle_complete_number_received
 
 isr_exit:
     ; Restore context and return from interrupt
@@ -130,18 +144,34 @@ init_usart:
 init_slave_variables:
     ; Initialize all digit storage variables to 0
     CLRF    digit_index
-    CLRF    slave_digit_array_0
-    CLRF    slave_digit_array_1
-    CLRF    slave_digit_array_2
-    CLRF    slave_digit_array_3
-    CLRF    slave_digit_array_4
-    CLRF    slave_digit_array_5
-    CLRF    slave_digit_array_6
-    CLRF    slave_digit_array_7
-    CLRF    slave_digit_array_8
-    CLRF    slave_digit_array_9
-    CLRF    slave_digit_array_10
-    CLRF    slave_digit_array_11
+    MOVLW   .1              ; Start with receiving first number
+    MOVWF   current_number
+    ; Initialize first number array
+    CLRF    slave_digit_array1_0
+    CLRF    slave_digit_array1_1
+    CLRF    slave_digit_array1_2
+    CLRF    slave_digit_array1_3
+    CLRF    slave_digit_array1_4
+    CLRF    slave_digit_array1_5
+    CLRF    slave_digit_array1_6
+    CLRF    slave_digit_array1_7
+    CLRF    slave_digit_array1_8
+    CLRF    slave_digit_array1_9
+    CLRF    slave_digit_array1_10
+    CLRF    slave_digit_array1_11
+    ; Initialize second number array
+    CLRF    slave_digit_array2_0
+    CLRF    slave_digit_array2_1
+    CLRF    slave_digit_array2_2
+    CLRF    slave_digit_array2_3
+    CLRF    slave_digit_array2_4
+    CLRF    slave_digit_array2_5
+    CLRF    slave_digit_array2_6
+    CLRF    slave_digit_array2_7
+    CLRF    slave_digit_array2_8
+    CLRF    slave_digit_array2_9
+    CLRF    slave_digit_array2_10
+    CLRF    slave_digit_array2_11
     RETURN
 
 display_slave_ready:
@@ -206,40 +236,85 @@ store_received_digit:
     ; Store the received digit in the appropriate array position
     ; Use FSR (File Select Register) for indirect addressing
     MOVF    digit_index, 0
-    ADDLW   slave_digit_array_0    ; Calculate address of array element
-    MOVWF   FSR                    ; Point FSR to the array element
     
-    MOVF    received_digit, 0      ; Get the received digit
-    MOVWF   INDF                   ; Store it in the array using indirect addressing
+    ; Check which number we're receiving
+    MOVF    current_number, 0
+    SUBLW   .1                      ; Check if current_number == 1
+    BTFSC   STATUS, Z               ; If Z=1, we're receiving first number
+    GOTO    store_in_first_array
     
-    INCF    digit_index, 1         ; Move to next array position
+    ; Store in second number array
+    MOVF    digit_index, 0
+    ADDLW   slave_digit_array2_0    ; Calculate address of second array element
+    GOTO    store_digit_continue
+    
+store_in_first_array:
+    ; Store in first number array
+    MOVF    digit_index, 0
+    ADDLW   slave_digit_array1_0    ; Calculate address of first array element
+    
+store_digit_continue:
+    MOVWF   FSR                     ; Point FSR to the array element
+    MOVF    received_digit, 0       ; Get the received digit
+    MOVWF   INDF                    ; Store it in the array using indirect addressing
+    
+    INCF    digit_index, 1          ; Move to next array position
     
     RETURN
 
 display_complete_number:
-    ; Clear the display and show the received number
+    ; This function is kept for compatibility but redirects to new handler
+    CALL    handle_complete_number_received
+    RETURN
+
+handle_complete_number_received:
+    ; Handle when a complete 12-digit number is received
+    ; Check which number we just received
+    MOVF    current_number, 0
+    SUBLW   .1                      ; Check if current_number == 1
+    BTFSC   STATUS, Z               ; If Z=1, we just received first number
+    GOTO    first_number_complete
+    
+    ; We just received second number
+    CALL    display_both_numbers
+    GOTO    complete_reception_done
+    
+first_number_complete:
+    ; Display first number and prepare for second
+    CALL    display_first_number_received
+    
+    ; Set up for receiving second number
+    MOVLW   .2
+    MOVWF   current_number          ; Now receiving second number
+    CLRF    digit_index             ; Reset digit index for second number
+    
+complete_reception_done:
+    RETURN
+
+display_first_number_received:
+    ; Clear the display and show the first received number
     MOVLW   0x01            ; Clear display
     CALL    lcd_cmd
     
     MOVLW   0x80            ; Position cursor at first line
     CALL    lcd_cmd
     
-    ; Display "RECEIVED:"
+    ; Display "NUMBER 1:"
+    MOVLW   'N'
+    CALL    lcd_data
+    MOVLW   'U'
+    CALL    lcd_data
+    MOVLW   'M'
+    CALL    lcd_data
+    MOVLW   'B'
+    CALL    lcd_data
+    MOVLW   'E'
+    CALL    lcd_data
     MOVLW   'R'
     CALL    lcd_data
-    MOVLW   'E'
+    MOVLW   ' '
     CALL    lcd_data
-    MOVLW   'C'
-    CALL    lcd_data
-    MOVLW   'E'
-    CALL    lcd_data
-    MOVLW   'I'
-    CALL    lcd_data
-    MOVLW   'V'
-    CALL    lcd_data
-    MOVLW   'E'
-    CALL    lcd_data
-    MOVLW   'D'
+    MOVLW   '1'
     CALL    lcd_data
     MOVLW   ':'
     CALL    lcd_data
@@ -247,37 +322,119 @@ display_complete_number:
     MOVLW   0xC0            ; Position cursor at second line
     CALL    lcd_cmd
     
-    ; Display all 12 digits with decimal point after 6th digit
-    CALL    display_received_digits
-    
-    ; Reset digit index for next reception
-    CLRF    digit_index
+    ; Display the first number with decimal point
+    CALL    display_received_digits_1
     
     RETURN
 
-display_received_digits:
-    ; Display the complete number with decimal point
-    MOVF    slave_digit_array_0, 0
+display_both_numbers:
+    ; Clear the display and show both received numbers
+    MOVLW   0x01            ; Clear display
+    CALL    lcd_cmd
+    
+    MOVLW   0x80            ; Position cursor at first line
+    CALL    lcd_cmd
+    
+    ; Display "NUM1:" followed by first 8 digits of first number
+    MOVLW   'N'
+    CALL    lcd_data
+    MOVLW   '1'
+    CALL    lcd_data
+    MOVLW   ':'
+    CALL    lcd_data
+    
+    ; Display first part of first number
+    MOVF    slave_digit_array1_0, 0
+    ADDLW   '0'
+    CALL    lcd_data
+    MOVF    slave_digit_array1_1, 0
+    ADDLW   '0'
+    CALL    lcd_data
+    MOVF    slave_digit_array1_2, 0
+    ADDLW   '0'
+    CALL    lcd_data
+    MOVF    slave_digit_array1_3, 0
+    ADDLW   '0'
+    CALL    lcd_data
+    MOVF    slave_digit_array1_4, 0
+    ADDLW   '0'
+    CALL    lcd_data
+    MOVF    slave_digit_array1_5, 0
+    ADDLW   '0'
+    CALL    lcd_data
+    MOVLW   '.'
+    CALL    lcd_data
+    MOVF    slave_digit_array1_6, 0
+    ADDLW   '0'
+    CALL    lcd_data
+    MOVF    slave_digit_array1_7, 0
+    ADDLW   '0'
+    CALL    lcd_data
+    
+    MOVLW   0xC0            ; Position cursor at second line
+    CALL    lcd_cmd
+    
+    ; Display "NUM2:" followed by first part of second number
+    MOVLW   'N'
+    CALL    lcd_data
+    MOVLW   '2'
+    CALL    lcd_data
+    MOVLW   ':'
+    CALL    lcd_data
+    
+    ; Display first part of second number
+    MOVF    slave_digit_array2_0, 0
+    ADDLW   '0'
+    CALL    lcd_data
+    MOVF    slave_digit_array2_1, 0
+    ADDLW   '0'
+    CALL    lcd_data
+    MOVF    slave_digit_array2_2, 0
+    ADDLW   '0'
+    CALL    lcd_data
+    MOVF    slave_digit_array2_3, 0
+    ADDLW   '0'
+    CALL    lcd_data
+    MOVF    slave_digit_array2_4, 0
+    ADDLW   '0'
+    CALL    lcd_data
+    MOVF    slave_digit_array2_5, 0
+    ADDLW   '0'
+    CALL    lcd_data
+    MOVLW   '.'
+    CALL    lcd_data
+    MOVF    slave_digit_array2_6, 0
+    ADDLW   '0'
+    CALL    lcd_data
+    MOVF    slave_digit_array2_7, 0
+    ADDLW   '0'
+    CALL    lcd_data
+    
+    RETURN
+
+display_received_digits_1:
+    ; Display the complete first number with decimal point
+    MOVF    slave_digit_array1_0, 0
     ADDLW   '0'             ; Convert digit to ASCII
     CALL    lcd_data
     
-    MOVF    slave_digit_array_1, 0
+    MOVF    slave_digit_array1_1, 0
     ADDLW   '0'
     CALL    lcd_data
     
-    MOVF    slave_digit_array_2, 0
+    MOVF    slave_digit_array1_2, 0
     ADDLW   '0'
     CALL    lcd_data
     
-    MOVF    slave_digit_array_3, 0
+    MOVF    slave_digit_array1_3, 0
     ADDLW   '0'
     CALL    lcd_data
     
-    MOVF    slave_digit_array_4, 0
+    MOVF    slave_digit_array1_4, 0
     ADDLW   '0'
     CALL    lcd_data
     
-    MOVF    slave_digit_array_5, 0
+    MOVF    slave_digit_array1_5, 0
     ADDLW   '0'
     CALL    lcd_data
     
@@ -285,27 +442,83 @@ display_received_digits:
     MOVLW   '.'
     CALL    lcd_data
     
-    MOVF    slave_digit_array_6, 0
+    MOVF    slave_digit_array1_6, 0
     ADDLW   '0'
     CALL    lcd_data
     
-    MOVF    slave_digit_array_7, 0
+    MOVF    slave_digit_array1_7, 0
     ADDLW   '0'
     CALL    lcd_data
     
-    MOVF    slave_digit_array_8, 0
+    MOVF    slave_digit_array1_8, 0
     ADDLW   '0'
     CALL    lcd_data
     
-    MOVF    slave_digit_array_9, 0
+    MOVF    slave_digit_array1_9, 0
     ADDLW   '0'
     CALL    lcd_data
     
-    MOVF    slave_digit_array_10, 0
+    MOVF    slave_digit_array1_10, 0
     ADDLW   '0'
     CALL    lcd_data
     
-    MOVF    slave_digit_array_11, 0
+    MOVF    slave_digit_array1_11, 0
+    ADDLW   '0'
+    CALL    lcd_data
+    
+    RETURN
+
+display_received_digits_2:
+    ; Display the complete second number with decimal point
+    MOVF    slave_digit_array2_0, 0
+    ADDLW   '0'             ; Convert digit to ASCII
+    CALL    lcd_data
+    
+    MOVF    slave_digit_array2_1, 0
+    ADDLW   '0'
+    CALL    lcd_data
+    
+    MOVF    slave_digit_array2_2, 0
+    ADDLW   '0'
+    CALL    lcd_data
+    
+    MOVF    slave_digit_array2_3, 0
+    ADDLW   '0'
+    CALL    lcd_data
+    
+    MOVF    slave_digit_array2_4, 0
+    ADDLW   '0'
+    CALL    lcd_data
+    
+    MOVF    slave_digit_array2_5, 0
+    ADDLW   '0'
+    CALL    lcd_data
+    
+    ; Add decimal point
+    MOVLW   '.'
+    CALL    lcd_data
+    
+    MOVF    slave_digit_array2_6, 0
+    ADDLW   '0'
+    CALL    lcd_data
+    
+    MOVF    slave_digit_array2_7, 0
+    ADDLW   '0'
+    CALL    lcd_data
+    
+    MOVF    slave_digit_array2_8, 0
+    ADDLW   '0'
+    CALL    lcd_data
+    
+    MOVF    slave_digit_array2_9, 0
+    ADDLW   '0'
+    CALL    lcd_data
+    
+    MOVF    slave_digit_array2_10, 0
+    ADDLW   '0'
+    CALL    lcd_data
+    
+    MOVF    slave_digit_array2_11, 0
     ADDLW   '0'
     CALL    lcd_data
     
