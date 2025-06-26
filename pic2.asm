@@ -142,6 +142,36 @@ init_slave_variables:
     CLRF    slave_digit_array_9
     CLRF    slave_digit_array_10
     CLRF    slave_digit_array_11
+
+
+
+    MOVLW   1
+    MOVWF   slave_digit_array_0
+    MOVLW   2
+    MOVWF   slave_digit_array_1
+    MOVLW   3
+    MOVWF   slave_digit_array_2
+    MOVLW   4
+    MOVWF   slave_digit_array_3
+    MOVLW   5
+    MOVWF   slave_digit_array_4
+    MOVLW   6
+    MOVWF   slave_digit_array_5
+    MOVLW   7
+    MOVWF   slave_digit_array_6
+    MOVLW   8
+    MOVWF   slave_digit_array_7
+    MOVLW   9
+    MOVWF   slave_digit_array_8
+    MOVLW   5
+    MOVWF   slave_digit_array_9
+    MOVLW   6
+    MOVWF   slave_digit_array_10
+    MOVLW   7
+    MOVWF   slave_digit_array_11
+
+
+
     RETURN
 
 display_slave_ready:

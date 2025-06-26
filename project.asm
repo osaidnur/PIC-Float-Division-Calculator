@@ -488,9 +488,22 @@ position_cursor:
 increment_current_digit_1:
     ; Get pointer to current digit using FSR (File Select Register)
     movf    digit_cursor_pos, 0
+    ; If cursor position is 7 or higher, subtract 1 to account for skipped decimal point
+    sublw   .6                  ; Compare cursor position with 6
+    btfss   STATUS, C           ; If cursor_pos > 6 (carry clear), adjust index
+    goto    adjust_index_1
+    ; Cursor position is 0-5, use directly
+    movf    digit_cursor_pos, 0
     addlw   digit_array1_0
     movwf   FSR
-    
+    goto    increment_digit_1
+adjust_index_1:
+    ; Cursor position is 7-12, map to array indices 6-11
+    movf    digit_cursor_pos, 0
+    addlw   .255                ; Subtract 1 (add -1 = add 255)
+    addlw   digit_array1_0
+    movwf   FSR
+increment_digit_1:
     ; Increment the digit (0-9 cycle)
     incf    INDF, 1             ; Increment digit at FSR address
     movf    INDF, 0             ; Load current value
@@ -504,9 +517,22 @@ increment_current_digit_1:
 increment_current_digit_2:
     ; Get pointer to current digit using FSR (File Select Register)
     movf    digit_cursor_pos, 0
+    ; If cursor position is 7 or higher, subtract 1 to account for skipped decimal point
+    sublw   .6                  ; Compare cursor position with 6
+    btfss   STATUS, C           ; If cursor_pos > 6 (carry clear), adjust index
+    goto    adjust_index_2
+    ; Cursor position is 0-5, use directly
+    movf    digit_cursor_pos, 0
     addlw   digit_array2_0
     movwf   FSR
-    
+    goto    increment_digit_2
+adjust_index_2:
+    ; Cursor position is 7-12, map to array indices 6-11
+    movf    digit_cursor_pos, 0
+    addlw   .255                ; Subtract 1 (add -1 = add 255)
+    addlw   digit_array2_0
+    movwf   FSR
+increment_digit_2:
     ; Increment the digit (0-9 cycle)
     incf    INDF, 1             ; Increment digit at FSR address
     movf    INDF, 0             ; Load current value
@@ -524,8 +550,22 @@ update_single_digit_display_1:
     
     ; Get current digit value and display it
     movf    digit_cursor_pos, 0
+    ; If cursor position is 7 or higher, subtract 1 to account for skipped decimal point
+    sublw   .6                  ; Compare cursor position with 6
+    btfss   STATUS, C           ; If cursor_pos > 6 (carry clear), adjust index
+    goto    adjust_display_index_1
+    ; Cursor position is 0-5, use directly
+    movf    digit_cursor_pos, 0
     addlw   digit_array1_0
     movwf   FSR
+    goto    display_digit_1
+adjust_display_index_1:
+    ; Cursor position is 7-12, map to array indices 6-11
+    movf    digit_cursor_pos, 0
+    addlw   .255                ; Subtract 1 (add -1 = add 255)
+    addlw   digit_array1_0
+    movwf   FSR
+display_digit_1:
     movf    INDF, 0             ; Get digit value
     addlw   '0'                 ; Convert to ASCII
     call    lcd_data            ; Display the digit
@@ -546,8 +586,22 @@ update_single_digit_display_2:
     
     ; Get current digit value and display it
     movf    digit_cursor_pos, 0
+    ; If cursor position is 7 or higher, subtract 1 to account for skipped decimal point
+    sublw   .6                  ; Compare cursor position with 6
+    btfss   STATUS, C           ; If cursor_pos > 6 (carry clear), adjust index
+    goto    adjust_display_index_2
+    ; Cursor position is 0-5, use directly
+    movf    digit_cursor_pos, 0
     addlw   digit_array2_0
     movwf   FSR
+    goto    display_digit_2
+adjust_display_index_2:
+    ; Cursor position is 7-12, map to array indices 6-11
+    movf    digit_cursor_pos, 0
+    addlw   .255                ; Subtract 1 (add -1 = add 255)
+    addlw   digit_array2_0
+    movwf   FSR
+display_digit_2:
     movf    INDF, 0             ; Get digit value
     addlw   '0'                 ; Convert to ASCII
     call    lcd_data            ; Display the digit
