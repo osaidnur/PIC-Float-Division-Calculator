@@ -40,6 +40,7 @@ INCLUDE "P16F877A.INC"
         ; USART variables for communication with slave PIC
         transmit_index        ; Index for transmitting digits (0-11)
         number_transmitted    ; Flag to track if first number was transmitted
+        number2_transmitted   ; Flag to track if second number was transmitted
 
     ENDC
 
@@ -129,6 +130,7 @@ start
     ; Initialize USART variables
     clrf    transmit_index      ; Start transmitting from first digit
     clrf    number_transmitted  ; First number not transmitted yet
+    clrf    number2_transmitted ; Second number not transmitted yet
 ;-----
 	CALL    inid 			;calls inid method to initialize the lcd, this method is inside LCDIS.INC
   	;then print the welcomming page.....
@@ -227,12 +229,34 @@ longPulse:
     subwf   digit_cursor_pos, 0 ; Check if cursor is at decimal point
     btfsc   STATUS, Z           ; If cursor is at decimal point (Z==1), increment again, if z=0 (sub res is not 0) skip.
     incf    digit_cursor_pos, 1 ; Skip decimal point
-    ; If the cursor position exceeds the last digit, do job that i will do later.
+    ; If the cursor position exceeds the last digit, handle based on current screen
     movlw   0x0D                ; Last digit position (12)
     subwf   digit_cursor_pos, 0 ; Check if cursor exceeds last digit
-    btfsc   STATUS, Z           ; If cursor is at last digit, do nothing for now.
-    CALL show_the_second_num_and_transmit ;i want to fix it after, i want to make it go to the second number.; need to check also
-    ;if i'm in the second screen don't print the second num, no, calculate the result and print it.
+    btfss   STATUS, Z           ; If cursor doesn't exceed last digit, skip
+    goto    continue_longpulse  ; Continue with normal cursor update
+    
+    ; Cursor exceeded last digit - check which screen we're on
+    movlw   .1
+    subwf   screen1, 0
+    btfss   STATUS, Z           ; Check if this is the second screen
+    goto    first_screen_end    ; We're on first screen
+    ; We're on second screen - transmit second number
+    ; Check if we haven't transmitted the second number yet
+    movf    number2_transmitted, 0
+    sublw   .0                  ; Check if number2_transmitted == 0
+    btfss   STATUS, Z           ; If not zero, skip transmission
+    goto    isr_exit            ; Already transmitted, just exit
+    
+    call    transmit_second_number_to_slave
+    ; Mark that we've transmitted the second number
+    movlw   .1
+    movwf   number2_transmitted
+    goto    isr_exit            ; Exit after transmission
+first_screen_end:
+    ; We're on first screen - show second number and transmit first
+    call    show_the_second_num_and_transmit
+    goto    isr_exit            ; Exit after showing second screen
+continue_longpulse:
     ;else update the display, then exit
 
     movlw   .1
@@ -748,6 +772,36 @@ transmit_loop:
     SUBLW   .12                     ; Compare with 12
     BTFSS   STATUS, Z               ; If not equal to 12, continue
     GOTO    transmit_loop           ; Send next digit
+    
+    RETURN
+
+transmit_second_number_to_slave:
+    ; This function sends all 12 digits of the second number to the slave PIC
+    ; Each digit is sent as a separate byte through USART
+    
+    CLRF    transmit_index          ; Start from first digit (index 0)
+    
+transmit_loop_2:
+    ; Get the current digit to transmit using indirect addressing
+    MOVF    transmit_index, 0
+    ADDLW   digit_array2_0          ; Calculate address of digit from second array
+    MOVWF   FSR                     ; Point FSR to the digit
+    MOVF    INDF, 0                 ; Get the digit value (0-9)
+    
+    ; Send this digit to slave PIC
+    CALL    usart_send_byte
+    
+    ; Small delay between transmissions to ensure slave can process
+    CALL    delay_5ms
+    
+    ; Move to next digit
+    INCF    transmit_index, 1
+    
+    ; Check if we sent all 12 digits
+    MOVF    transmit_index, 0
+    SUBLW   .12                     ; Compare with 12
+    BTFSS   STATUS, Z               ; If not equal to 12, continue
+    GOTO    transmit_loop_2         ; Send next digit
     
     RETURN
 
