@@ -7,19 +7,37 @@ INCLUDE "P16F877A.INC"
         temp_char
         received_digit      ; Single digit received from master
         digit_index         ; Index for storing received digits (0-11)
-        ; Array to store the received 12-digit number
-        slave_digit_array_0
-        slave_digit_array_1
-        slave_digit_array_2
-        slave_digit_array_3
-        slave_digit_array_4
-        slave_digit_array_5
-        slave_digit_array_6
-        slave_digit_array_7
-        slave_digit_array_8
-        slave_digit_array_9
-        slave_digit_array_10
-        slave_digit_array_11
+        number_count        ; Track which number we're receiving (0=first, 1=second)
+        ; Array to store the first received 12-digit number
+        slave_digit_array1_0
+        slave_digit_array1_1
+        slave_digit_array1_2
+        slave_digit_array1_3
+        slave_digit_array1_4
+        slave_digit_array1_5
+        slave_digit_array1_6
+        slave_digit_array1_7
+        slave_digit_array1_8
+        slave_digit_array1_9
+        slave_digit_array1_10
+        slave_digit_array1_11
+        ; Array to store the second received 12-digit number
+        slave_digit_array2_0
+        slave_digit_array2_1
+        slave_digit_array2_2
+        slave_digit_array2_3
+        slave_digit_array2_4
+        slave_digit_array2_5
+        slave_digit_array2_6
+        slave_digit_array2_7
+        slave_digit_array2_8
+        slave_digit_array2_9
+        slave_digit_array2_10
+        slave_digit_array2_11
+        ; Status flags
+        first_number_received   ; Flag: 1 = first number completely received
+        second_number_received  ; Flag: 1 = second number completely received
+        both_numbers_ready      ; Flag: 1 = both numbers received and ready
     ENDC
 
     ORG 0x00            ; Reset vector
@@ -86,14 +104,62 @@ USART_ISR:
     MOVF    RCREG, 0        ; Read received data into W register
     MOVWF   received_digit  ; Store received digit
 
-    ; Store the digit in our array
-    CALL    store_received_digit
+    ; Store the digit in the appropriate array based on number_count
+    MOVF    number_count, 0
+    SUBLW   .0              ; Check if receiving first number
+    BTFSC   STATUS, Z       ; If zero, we're receiving first number
+    GOTO    store_first_number
+    ; Otherwise, store in second number array
+    GOTO    store_second_number
 
-    ; Check if we received all 12 digits
+store_first_number:
+    ; Store digit in first number array
     MOVF    digit_index, 0
-    SUBLW   .12             ; Compare with 12
-    BTFSC   STATUS, Z       ; If we received 12 digits
-    CALL    display_complete_number
+    ADDLW   slave_digit_array1_0  ; Calculate address in first array
+    MOVWF   FSR                   ; Point FSR to storage location
+    MOVF    received_digit, 0     ; Get the received digit
+    MOVWF   INDF                  ; Store digit in array
+    
+    ; Increment digit index
+    INCF    digit_index, 1
+    
+    ; Check if we received all 12 digits of first number
+    MOVF    digit_index, 0
+    SUBLW   .12                   ; Compare with 12
+    BTFSS   STATUS, Z             ; If not equal to 12, continue receiving
+    GOTO    isr_exit              ; Still receiving first number
+    
+    ; First number complete
+    MOVLW   .1
+    MOVWF   first_number_received
+    CLRF    digit_index           ; Reset index for second number
+    INCF    number_count, 1       ; Switch to receiving second number
+    CALL    display_first_number_received
+    GOTO    isr_exit
+
+store_second_number:
+    ; Store digit in second number array
+    MOVF    digit_index, 0
+    ADDLW   slave_digit_array2_0  ; Calculate address in second array
+    MOVWF   FSR                   ; Point FSR to storage location
+    MOVF    received_digit, 0     ; Get the received digit
+    MOVWF   INDF                  ; Store digit in array
+    
+    ; Increment digit index
+    INCF    digit_index, 1
+    
+    ; Check if we received all 12 digits of second number
+    MOVF    digit_index, 0
+    SUBLW   .12                   ; Compare with 12
+    BTFSS   STATUS, Z             ; If not equal to 12, continue receiving
+    GOTO    isr_exit              ; Still receiving second number
+    
+    ; Second number complete
+    MOVLW   .1
+    MOVWF   second_number_received
+    MOVLW   .1
+    MOVWF   both_numbers_ready    ; Both numbers now available
+    CALL    display_both_numbers_received
 
 isr_exit:
     ; Restore context and return from interrupt
@@ -128,50 +194,43 @@ init_usart:
     RETURN
 
 init_slave_variables:
-    ; Initialize all digit storage variables to 0
+    ; Initialize all digit storage variables and control flags to 0
     CLRF    digit_index
-    CLRF    slave_digit_array_0
-    CLRF    slave_digit_array_1
-    CLRF    slave_digit_array_2
-    CLRF    slave_digit_array_3
-    CLRF    slave_digit_array_4
-    CLRF    slave_digit_array_5
-    CLRF    slave_digit_array_6
-    CLRF    slave_digit_array_7
-    CLRF    slave_digit_array_8
-    CLRF    slave_digit_array_9
-    CLRF    slave_digit_array_10
-    CLRF    slave_digit_array_11
-
-
-
-    MOVLW   1
-    MOVWF   slave_digit_array_0
-    MOVLW   2
-    MOVWF   slave_digit_array_1
-    MOVLW   3
-    MOVWF   slave_digit_array_2
-    MOVLW   4
-    MOVWF   slave_digit_array_3
-    MOVLW   5
-    MOVWF   slave_digit_array_4
-    MOVLW   6
-    MOVWF   slave_digit_array_5
-    MOVLW   7
-    MOVWF   slave_digit_array_6
-    MOVLW   8
-    MOVWF   slave_digit_array_7
-    MOVLW   9
-    MOVWF   slave_digit_array_8
-    MOVLW   5
-    MOVWF   slave_digit_array_9
-    MOVLW   6
-    MOVWF   slave_digit_array_10
-    MOVLW   7
-    MOVWF   slave_digit_array_11
-
-
-
+    CLRF    number_count
+    
+    ; Clear first number array
+    CLRF    slave_digit_array1_0
+    CLRF    slave_digit_array1_1
+    CLRF    slave_digit_array1_2
+    CLRF    slave_digit_array1_3
+    CLRF    slave_digit_array1_4
+    CLRF    slave_digit_array1_5
+    CLRF    slave_digit_array1_6
+    CLRF    slave_digit_array1_7
+    CLRF    slave_digit_array1_8
+    CLRF    slave_digit_array1_9
+    CLRF    slave_digit_array1_10
+    CLRF    slave_digit_array1_11
+    
+    ; Clear second number array
+    CLRF    slave_digit_array2_0
+    CLRF    slave_digit_array2_1
+    CLRF    slave_digit_array2_2
+    CLRF    slave_digit_array2_3
+    CLRF    slave_digit_array2_4
+    CLRF    slave_digit_array2_5
+    CLRF    slave_digit_array2_6
+    CLRF    slave_digit_array2_7
+    CLRF    slave_digit_array2_8
+    CLRF    slave_digit_array2_9
+    CLRF    slave_digit_array2_10
+    CLRF    slave_digit_array2_11
+    
+    ; Clear status flags
+    CLRF    first_number_received
+    CLRF    second_number_received
+    CLRF    both_numbers_ready
+    
     RETURN
 
 display_slave_ready:
@@ -232,20 +291,6 @@ display_slave_ready:
     
     RETURN
 
-store_received_digit:
-    ; Store the received digit in the appropriate array position
-    ; Use FSR (File Select Register) for indirect addressing
-    MOVF    digit_index, 0
-    ADDLW   slave_digit_array_0    ; Calculate address of array element
-    MOVWF   FSR                    ; Point FSR to the array element
-    
-    MOVF    received_digit, 0      ; Get the received digit
-    MOVWF   INDF                   ; Store it in the array using indirect addressing
-    
-    INCF    digit_index, 1         ; Move to next array position
-    
-    RETURN
-
 display_complete_number:
     ; Clear the display and show the received number
     MOVLW   0x01            ; Clear display
@@ -287,27 +332,27 @@ display_complete_number:
 
 display_received_digits:
     ; Display the complete number with decimal point
-    MOVF    slave_digit_array_0, 0
+    MOVF    slave_digit_array1_0, 0
     ADDLW   '0'             ; Convert digit to ASCII
     CALL    lcd_data
     
-    MOVF    slave_digit_array_1, 0
+    MOVF    slave_digit_array1_1, 0
     ADDLW   '0'
     CALL    lcd_data
     
-    MOVF    slave_digit_array_2, 0
+    MOVF    slave_digit_array1_2, 0
     ADDLW   '0'
     CALL    lcd_data
     
-    MOVF    slave_digit_array_3, 0
+    MOVF    slave_digit_array1_3, 0
     ADDLW   '0'
     CALL    lcd_data
     
-    MOVF    slave_digit_array_4, 0
+    MOVF    slave_digit_array1_4, 0
     ADDLW   '0'
     CALL    lcd_data
     
-    MOVF    slave_digit_array_5, 0
+    MOVF    slave_digit_array1_5, 0
     ADDLW   '0'
     CALL    lcd_data
     
@@ -315,28 +360,125 @@ display_received_digits:
     MOVLW   '.'
     CALL    lcd_data
     
-    MOVF    slave_digit_array_6, 0
+    MOVF    slave_digit_array1_6, 0
     ADDLW   '0'
     CALL    lcd_data
     
-    MOVF    slave_digit_array_7, 0
+    MOVF    slave_digit_array1_7, 0
     ADDLW   '0'
     CALL    lcd_data
     
-    MOVF    slave_digit_array_8, 0
+    MOVF    slave_digit_array1_8, 0
     ADDLW   '0'
     CALL    lcd_data
     
-    MOVF    slave_digit_array_9, 0
+    MOVF    slave_digit_array1_9, 0
     ADDLW   '0'
     CALL    lcd_data
     
-    MOVF    slave_digit_array_10, 0
+    MOVF    slave_digit_array1_10, 0
     ADDLW   '0'
     CALL    lcd_data
     
-    MOVF    slave_digit_array_11, 0
+    MOVF    slave_digit_array1_11, 0
     ADDLW   '0'
+    CALL    lcd_data
+    
+    RETURN
+
+display_first_number_received:
+    ; Display message when first number is completely received
+    MOVLW   0x01            ; Clear display
+    CALL    lcd_cmd
+    
+    MOVLW   0x80            ; Position cursor at first line
+    CALL    lcd_cmd
+    
+    ; Display "FIRST NUM RCV"
+    MOVLW   'F'
+    CALL    lcd_data
+    MOVLW   'I'
+    CALL    lcd_data
+    MOVLW   'R'
+    CALL    lcd_data
+    MOVLW   'S'
+    CALL    lcd_data
+    MOVLW   'T'
+    CALL    lcd_data
+    MOVLW   ' '
+    CALL    lcd_data
+    MOVLW   'N'
+    CALL    lcd_data
+    MOVLW   'U'
+    CALL    lcd_data
+    MOVLW   'M'
+    CALL    lcd_data
+    MOVLW   ' '
+    CALL    lcd_data
+    MOVLW   'R'
+    CALL    lcd_data
+    MOVLW   'C'
+    CALL    lcd_data
+    MOVLW   'V'
+    CALL    lcd_data
+    
+    RETURN
+
+display_both_numbers_received:
+    ; Display message when both numbers are completely received
+    MOVLW   0x01            ; Clear display
+    CALL    lcd_cmd
+    
+    MOVLW   0x80            ; Position cursor at first line
+    CALL    lcd_cmd
+    
+    ; Display "BOTH NUMBERS"
+    MOVLW   'B'
+    CALL    lcd_data
+    MOVLW   'O'
+    CALL    lcd_data
+    MOVLW   'T'
+    CALL    lcd_data
+    MOVLW   'H'
+    CALL    lcd_data
+    MOVLW   ' '
+    CALL    lcd_data
+    MOVLW   'N'
+    CALL    lcd_data
+    MOVLW   'U'
+    CALL    lcd_data
+    MOVLW   'M'
+    CALL    lcd_data
+    MOVLW   'B'
+    CALL    lcd_data
+    MOVLW   'E'
+    CALL    lcd_data
+    MOVLW   'R'
+    CALL    lcd_data
+    MOVLW   'S'
+    CALL    lcd_data
+    
+    MOVLW   0xC0            ; Position cursor at second line
+    CALL    lcd_cmd
+    
+    ; Display "RECEIVED!"
+    MOVLW   'R'
+    CALL    lcd_data
+    MOVLW   'E'
+    CALL    lcd_data
+    MOVLW   'C'
+    CALL    lcd_data
+    MOVLW   'E'
+    CALL    lcd_data
+    MOVLW   'I'
+    CALL    lcd_data
+    MOVLW   'V'
+    CALL    lcd_data
+    MOVLW   'E'
+    CALL    lcd_data
+    MOVLW   'D'
+    CALL    lcd_data
+    MOVLW   '!'
     CALL    lcd_data
     
     RETURN
@@ -350,6 +492,23 @@ lcd_data:
 lcd_cmd:
     BCF     Select, RS      ; RS = 0 for command (using Select variable from LCDIS.INC)
     CALL    send            ; Use send function from LCDIS.INC
+    RETURN
+
+; Utility functions to access stored numbers
+get_first_number_digit:
+    ; Input: W register contains digit index (0-11)
+    ; Output: W register contains digit value
+    ADDLW   slave_digit_array1_0  ; Calculate address
+    MOVWF   FSR                   ; Point FSR to digit
+    MOVF    INDF, 0               ; Get digit value into W
+    RETURN
+
+get_second_number_digit:
+    ; Input: W register contains digit index (0-11)  
+    ; Output: W register contains digit value
+    ADDLW   slave_digit_array2_0  ; Calculate address
+    MOVWF   FSR                   ; Point FSR to digit
+    MOVF    INDF, 0               ; Get digit value into W
     RETURN
 
 INCLUDE "LCDIS.INC"
