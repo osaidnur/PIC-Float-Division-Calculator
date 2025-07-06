@@ -1,0 +1,246 @@
+MPLINK 4.41, Linker
+Linker Map File - Created Sun Jul 06 21:11:29 2025
+
+                                 Section Info
+                  Section       Type    Address   Location Size(Bytes)
+                ---------  ---------  ---------  ---------  ---------
+                   .org_0       code   0x000000    program   0x000002
+                   .cinit    romdata   0x000001    program   0x000004
+                   .org_1       code   0x000004    program   0x0009f0
+   .config_2007_PROJECT.O       code   0x002007    program   0x000002
+
+
+
+                              Program Memory Usage 
+                               Start         End      
+                           ---------   ---------      
+                            0x000000    0x000002      
+                            0x000004    0x0004fb      
+                            0x002007    0x002007      
+            1276 out of 8454 program addresses used, program memory utilization is 15%
+
+
+
+                              Symbols - Sorted by Name
+                     Name    Address   Location    Storage File                     
+                ---------  ---------  ---------  --------- ---------                
+              ISR_handler   0x000084    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+             _.org_1_04BF   0x0004bf    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+   adjust_display_index_1   0x00044c    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+   adjust_display_index_2   0x000462    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+           adjust_index_1   0x000425    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+           adjust_index_2   0x000437    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+      advance_frac_simple   0x0000f5    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+       advance_int_simple   0x0000e6    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+               blink_loop   0x000066    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+         button_interrupt   0x0000c0    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+       check_main_timeout   0x0000b3    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+     cycle_result_display   0x0001fa    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+                 debounce   0x00046d    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+                delay_1ms   0x00047b    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+               delay_20ms   0x000475    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+              delay_500ms   0x000470    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+                delay_5ms   0x000478    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+                 delay_ms   0x00047e    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+     display_all_digits_1   0x00038c    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+     display_all_digits_2   0x0003b3    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+          display_digit_1   0x000450    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+          display_digit_2   0x000466    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+display_first_number_on_result   0x0001fd    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+     display_result_again   0x0001fb    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+  display_result_received   0x0002c3    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+    display_result_screen   0x0003da    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+display_second_number_on_result   0x00023c    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+   do_cursor_advance_only   0x0000e3    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+             do_prop_num1   0x0000d3    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+do_propagation_for_double_click   0x0000d9    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+      do_propagation_only   0x0000c9    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+     double_click_screen1   0x000290    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+     get_digit_value_num1   0x000104    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+     get_digit_value_num2   0x000115    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+         get_frac_digit_1   0x00010e    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+         get_frac_digit_2   0x00011f    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+      handle_button_click   0x000164    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+      handle_double_click   0x000285    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+handle_equals_screen_click   0x0001f8    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+handle_result_display_cycling   0x000177    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+       handle_result_mode   0x00007f    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+      handle_single_click   0x00027b    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+handle_single_result_click   0x000186    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+increment_current_digit_1   0x00041d    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+increment_current_digit_2   0x00042f    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+        increment_digit_1   0x000429    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+        increment_digit_2   0x00043b    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+                     inid   0x0004e1    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\LCDIS.INC
+        init_master_usart   0x000486    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+                 isr_exit   0x0000c7    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+     just_show_second_num   0x0004a0    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+                  lcd_cmd   0x0002f3    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+                 lcd_data   0x0002f0    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+                    loop1   0x0004c6    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\LCDIS.INC
+                    loopX   0x0004cb    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\LCDIS.INC
+                main_loop   0x00007a    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+       main_loop_continue   0x00007e    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+    move_to_equals_screen   0x0002ad    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+ move_to_fractional_part1   0x000293    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+ move_to_fractional_part2   0x0002a7    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+          move_to_number2   0x000299    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+                  ms_loop   0x00047f    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+               next_pos_1   0x000143    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+               next_pos_2   0x000162    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+                    onems   0x0004c4    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\LCDIS.INC
+          position_cursor   0x000419    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+            print_welcome   0x0002f6    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+   prop_double_click_num1   0x0000e0    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+              prop_frac_1   0x00013b    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+              prop_frac_2   0x00015a    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+              prop_loop_1   0x000129    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+              prop_loop_2   0x000148    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+ propagate_remaining_num1   0x000126    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+ propagate_remaining_num2   0x000145    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+                   pulseE   0x0004cf    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\LCDIS.INC
+               readResult   0x000095    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+restart_calculator_process   0x000198    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+     restart_main_timeout   0x0002bd    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+                     send   0x0004d3    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\LCDIS.INC
+       show_equals_screen   0x000383    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+       show_the_first_num   0x00031f    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+show_the_first_num_fractional   0x00033c    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+      show_the_second_num   0x000357    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+show_the_second_num_and_transmit   0x000499    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+show_the_second_num_fractional   0x00037a    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+     single_click_screen1   0x000282    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+           skip_decimal_1   0x000142    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+           skip_decimal_2   0x000161    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+ skip_second_transmission   0x0002b4    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+        skip_transmission   0x0002a0    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+                    start   0x000005    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+start_calculation_process   0x0002b8    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+            start_timeout   0x0002b9    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+  stay_at_frac_end_simple   0x0000fe    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+   stay_at_int_end_simple   0x0000ef    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+        stop_main_timeout   0x0002c1    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+         timer1_interrupt   0x0000a4    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+transmit_first_number_to_slave   0x0004a2    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+            transmit_loop   0x0004a3    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+          transmit_loop_2   0x0004b0    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+transmit_second_number_to_slave   0x0004af    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+update_single_digit_display_1   0x000441    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+update_single_digit_display_2   0x000457    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+                  us_loop   0x000481    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+          usart_send_byte   0x0004bc    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+                      xms   0x0004ca    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\LCDIS.INC
+
+
+
+                              Symbols - Sorted by Address
+                     Name    Address   Location    Storage File                     
+                ---------  ---------  ---------  --------- ---------                
+                    start   0x000005    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+               blink_loop   0x000066    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+                main_loop   0x00007a    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+       main_loop_continue   0x00007e    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+       handle_result_mode   0x00007f    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+              ISR_handler   0x000084    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+               readResult   0x000095    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+         timer1_interrupt   0x0000a4    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+       check_main_timeout   0x0000b3    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+         button_interrupt   0x0000c0    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+                 isr_exit   0x0000c7    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+      do_propagation_only   0x0000c9    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+             do_prop_num1   0x0000d3    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+do_propagation_for_double_click   0x0000d9    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+   prop_double_click_num1   0x0000e0    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+   do_cursor_advance_only   0x0000e3    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+       advance_int_simple   0x0000e6    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+   stay_at_int_end_simple   0x0000ef    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+      advance_frac_simple   0x0000f5    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+  stay_at_frac_end_simple   0x0000fe    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+     get_digit_value_num1   0x000104    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+         get_frac_digit_1   0x00010e    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+     get_digit_value_num2   0x000115    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+         get_frac_digit_2   0x00011f    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+ propagate_remaining_num1   0x000126    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+              prop_loop_1   0x000129    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+              prop_frac_1   0x00013b    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+           skip_decimal_1   0x000142    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+               next_pos_1   0x000143    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+ propagate_remaining_num2   0x000145    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+              prop_loop_2   0x000148    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+              prop_frac_2   0x00015a    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+           skip_decimal_2   0x000161    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+               next_pos_2   0x000162    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+      handle_button_click   0x000164    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+handle_result_display_cycling   0x000177    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+handle_single_result_click   0x000186    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+restart_calculator_process   0x000198    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+handle_equals_screen_click   0x0001f8    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+     cycle_result_display   0x0001fa    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+     display_result_again   0x0001fb    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+display_first_number_on_result   0x0001fd    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+display_second_number_on_result   0x00023c    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+      handle_single_click   0x00027b    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+     single_click_screen1   0x000282    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+      handle_double_click   0x000285    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+     double_click_screen1   0x000290    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+ move_to_fractional_part1   0x000293    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+          move_to_number2   0x000299    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+        skip_transmission   0x0002a0    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+ move_to_fractional_part2   0x0002a7    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+    move_to_equals_screen   0x0002ad    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+ skip_second_transmission   0x0002b4    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+start_calculation_process   0x0002b8    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+            start_timeout   0x0002b9    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+     restart_main_timeout   0x0002bd    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+        stop_main_timeout   0x0002c1    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+  display_result_received   0x0002c3    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+                 lcd_data   0x0002f0    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+                  lcd_cmd   0x0002f3    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+            print_welcome   0x0002f6    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+       show_the_first_num   0x00031f    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+show_the_first_num_fractional   0x00033c    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+      show_the_second_num   0x000357    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+show_the_second_num_fractional   0x00037a    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+       show_equals_screen   0x000383    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+     display_all_digits_1   0x00038c    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+     display_all_digits_2   0x0003b3    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+    display_result_screen   0x0003da    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+          position_cursor   0x000419    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+increment_current_digit_1   0x00041d    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+           adjust_index_1   0x000425    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+        increment_digit_1   0x000429    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+increment_current_digit_2   0x00042f    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+           adjust_index_2   0x000437    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+        increment_digit_2   0x00043b    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+update_single_digit_display_1   0x000441    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+   adjust_display_index_1   0x00044c    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+          display_digit_1   0x000450    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+update_single_digit_display_2   0x000457    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+   adjust_display_index_2   0x000462    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+          display_digit_2   0x000466    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+                 debounce   0x00046d    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+              delay_500ms   0x000470    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+               delay_20ms   0x000475    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+                delay_5ms   0x000478    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+                delay_1ms   0x00047b    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+                 delay_ms   0x00047e    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+                  ms_loop   0x00047f    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+                  us_loop   0x000481    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+        init_master_usart   0x000486    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+show_the_second_num_and_transmit   0x000499    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+     just_show_second_num   0x0004a0    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+transmit_first_number_to_slave   0x0004a2    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+            transmit_loop   0x0004a3    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+transmit_second_number_to_slave   0x0004af    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+          transmit_loop_2   0x0004b0    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+          usart_send_byte   0x0004bc    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+             _.org_1_04BF   0x0004bf    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\project.asm
+                    onems   0x0004c4    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\LCDIS.INC
+                    loop1   0x0004c6    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\LCDIS.INC
+                      xms   0x0004ca    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\LCDIS.INC
+                    loopX   0x0004cb    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\LCDIS.INC
+                   pulseE   0x0004cf    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\LCDIS.INC
+                     send   0x0004d3    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\LCDIS.INC
+                     inid   0x0004e1    program     static C:\Users\moath\Desktop\Last\PIC-Assembly-Project-main\LCDIS.INC
+
+

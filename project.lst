@@ -1,0 +1,3981 @@
+MPASM  5.43                       PROJECT.ASM   7-6-2025  21:11:22         PAGE  1
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+Warning[205]: Found directive in column 1. (PROCESSOR)
+                      00001 PROCESSOR 16F877A
+Warning[205]: Found directive in column 1. (__CONFIG)
+2007   3731           00002 __CONFIG 0x3731
+Warning[205]: Found directive in column 1. (INCLUDE)
+                      00003 INCLUDE "P16F877A.INC"
+                      00001         LIST
+                      00002 
+                      00003 ;==========================================================================
+                      00004 ;  MPASM PIC16F877A processor include
+                      00005 ; 
+                      00006 ;  (c) Copyright 1999-2011 Microchip Technology, All rights reserved
+                      00007 ;==========================================================================
+                      00008 
+                      00564         LIST
+                      00004 
+                      00005 ; --- VARIABLES ---
+Warning[205]: Found directive in column 1. (CBLOCK)
+                      00006 CBLOCK 0x20
+  00000020            00007 delay_ms_count
+  00000021            00008 blink_counter
+  00000022            00009 temp_char
+  00000023            00010 current_digit_value
+  00000024            00011 digit_cursor_pos
+  00000025            00012 digit_array1_0
+  00000026            00013 digit_array1_1
+  00000027            00014 digit_array1_2
+  00000028            00015 digit_array1_3
+  00000029            00016 digit_array1_4
+  0000002A            00017 digit_array1_5
+  0000002B            00018 digit_array1_6
+  0000002C            00019 digit_array1_7
+  0000002D            00020 digit_array1_8
+  0000002E            00021 digit_array1_9
+  0000002F            00022 digit_array1_10
+  00000030            00023 digit_array1_11
+  00000031            00024 digit_array2_0
+  00000032            00025 digit_array2_1
+  00000033            00026 digit_array2_2
+  00000034            00027 digit_array2_3
+  00000035            00028 digit_array2_4
+  00000036            00029 digit_array2_5
+  00000037            00030 digit_array2_6
+  00000038            00031 digit_array2_7
+  00000039            00032 digit_array2_8
+  0000003A            00033 digit_array2_9
+  0000003B            00034 digit_array2_10
+  0000003C            00035 digit_array2_11
+  0000003D            00036 result_array_0
+  0000003E            00037 result_array_1
+  0000003F            00038 result_array_2
+  00000040            00039 result_array_3
+  00000041            00040 result_array_4
+MPASM  5.43                       PROJECT.ASM   7-6-2025  21:11:22         PAGE  2
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+  00000042            00041 result_array_5
+  00000043            00042 result_array_6
+  00000044            00043 result_array_7
+  00000045            00044 result_array_8
+  00000046            00045 result_array_9
+  00000047            00046 result_array_10
+  00000048            00047 result_array_11
+  00000049            00048 resultDone
+  0000004A            00049 timer1_enabled
+  0000004B            00050 button_first_press
+  0000004C            00051 screen1
+  0000004D            00052 transmit_index
+  0000004E            00053 number_transmitted
+  0000004F            00054 number2_transmitted
+  00000050            00055 result_received
+  00000051            00056 calculation_done
+  00000052            00057 digit_index
+  00000053            00058 received_digit
+                      00059 ; TIMEOUT VARIABLES
+  00000054            00060 timeout_counter
+  00000055            00061 timeout_active
+                      00062 ; SIMPLIFIED DOUBLE CLICK DETECTION
+  00000056            00063 click_timer
+  00000057            00064 click_count
+                      00065 ; PART TRACKING
+  00000058            00066 current_part ; 0 = integer part, 1 = fractional part
+                      00067 ; NEW FEATURE: EQUALS SCREEN STATE
+  00000059            00068 showing_equals_screen
+                      00069 ; NEW FEATURE: PROPAGATION VARIABLES
+  0000005A            00070 propagation_value
+  0000005B            00071 propagation_index
+                      00072 ; RESULT DISPLAY CYCLING
+  0000005C            00073 result_display_state ; 0 = result, 1 = first number, 2 = second number
+  0000005D            00074 result_displayed_once ; Flag to prevent repeated display calls in main loop
+Warning[205]: Found directive in column 1. (ENDC)
+                      00075 ENDC
+                      00076 
+  00000000            00077 pushButton EQU 0    ; Button on RB0
+                      00078 
+                      00079 ; 2 seconds timeout = 2000ms = 200 * 10ms loops
+                      00080 ; But since original was moving after 5 seconds when set to 100,
+                      00081 ; For 2 seconds we need: 100 * (2/5) = 40
+  00000028            00082 TIMEOUT_2_SECONDS EQU .40
+                      00083 
+                      00084 ; FIXED: Reduced double-click window from 300ms to 150ms to avoid conflict with fast single clicks
+                      00085 ; 150ms = 15 * 10ms loops
+  0000000F            00086 DOUBLE_CLICK_TIMEOUT EQU .15
+                      00087 
+Warning[205]: Found directive in column 1. (ORG)
+                      00088 ORG 0x00
+Warning[203]: Found opcode in column 1. (GOTO)
+0000   2???           00089 GOTO start
+                      00090 
+MPASM  5.43                       PROJECT.ASM   7-6-2025  21:11:22         PAGE  3
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+Warning[205]: Found directive in column 1. (ORG)
+                      00091 ORG 0x04
+Warning[203]: Found opcode in column 1. (GOTO)
+0004   2???           00092 GOTO ISR_handler
+                      00093 
+                      00094 ;----------------------------------------MAIN PROGRAM---------------------------------------------------
+                            ----------
+0005                  00095 start:
+Warning[203]: Found opcode in column 1. (NOP)
+0005   0000           00096 NOP
+                      00097 
+                      00098 ; Configure I/O ports
+Warning[205]: Found directive in column 1. (BANKSEL)
+0006   1683 1303      00099 BANKSEL TRISD
+Warning[203]: Found opcode in column 1. (MOVLW)
+0008   3000           00100 MOVLW B'00000000'
+Warning[203]: Found opcode in column 1. (MOVWF)
+Message[302]: Register in operand not in bank 0.  Ensure that bank bits are correct.
+0009   0088           00101 MOVWF TRISD 
+Warning[203]: Found opcode in column 1. (MOVLW)
+000A   3001           00102 MOVLW B'00000001'
+Warning[203]: Found opcode in column 1. (MOVWF)
+Message[302]: Register in operand not in bank 0.  Ensure that bank bits are correct.
+000B   0086           00103 MOVWF TRISB
+                      00104 
+                      00105 ; Configure USART pins
+Warning[205]: Found directive in column 1. (BANKSEL)
+000C   1683 1303      00106 BANKSEL TRISC
+Warning[203]: Found opcode in column 1. (BCF)
+Message[302]: Register in operand not in bank 0.  Ensure that bank bits are correct.
+000E   1307           00107 BCF TRISC, 6
+Warning[203]: Found opcode in column 1. (BSF)
+Message[302]: Register in operand not in bank 0.  Ensure that bank bits are correct.
+000F   1787           00108 BSF TRISC, 7
+                      00109 
+                      00110 ; Configure interrupt
+Warning[205]: Found directive in column 1. (BANKSEL)
+0010   1683 1303      00111 BANKSEL OPTION_REG
+Warning[203]: Found opcode in column 1. (BCF)
+Message[302]: Register in operand not in bank 0.  Ensure that bank bits are correct.
+0012   1301           00112 BCF OPTION_REG, INTEDG
+                      00113 
+                      00114 ; Configure Timer1 for 10ms interrupts
+Warning[205]: Found directive in column 1. (BANKSEL)
+0013   1283 1303      00115 BANKSEL T1CON
+Warning[203]: Found opcode in column 1. (MOVLW)
+0015   3031           00116 MOVLW B'00110001'
+Warning[203]: Found opcode in column 1. (MOVWF)
+0016   0090           00117 MOVWF T1CON
+                      00118 
+                      00119 ; Set Timer1 initial value for 10ms overflow
+Warning[205]: Found directive in column 1. (BANKSEL)
+0017   1283 1303      00120 BANKSEL TMR1H
+MPASM  5.43                       PROJECT.ASM   7-6-2025  21:11:22         PAGE  4
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+Warning[203]: Found opcode in column 1. (MOVLW)
+0019   30EC           00121 MOVLW 0xEC
+Warning[203]: Found opcode in column 1. (MOVWF)
+001A   008F           00122 MOVWF TMR1H
+Warning[203]: Found opcode in column 1. (MOVLW)
+001B   3078           00123 MOVLW 0x78
+Warning[203]: Found opcode in column 1. (MOVWF)
+001C   008E           00124 MOVWF TMR1L
+                      00125 
+                      00126 ; Configure Timer1 interrupt
+Warning[205]: Found directive in column 1. (BANKSEL)
+001D   1683 1303      00127 BANKSEL PIE1
+Warning[203]: Found opcode in column 1. (BSF)
+Message[302]: Register in operand not in bank 0.  Ensure that bank bits are correct.
+001F   140C           00128 BSF PIE1, TMR1IE
+Warning[205]: Found directive in column 1. (BANKSEL)
+0020   1283 1303      00129 BANKSEL PIR1
+Warning[203]: Found opcode in column 1. (BCF)
+0022   100C           00130 BCF PIR1, TMR1IF
+                      00131 
+                      00132 ; Initialize USART
+Warning[203]: Found opcode in column 1. (CALL)
+0023   2???           00133 CALL init_master_usart
+                      00134 
+                      00135 ; Return to bank 0
+Warning[205]: Found directive in column 1. (BANKSEL)
+0024   1283 1303      00136 BANKSEL PORTD
+Warning[203]: Found opcode in column 1. (CLRF)
+0026   0188           00137 CLRF PORTD
+                      00138 
+                      00139 ; Initialize all variables
+Warning[203]: Found opcode in column 1. (clrf)
+0027   01A4           00140 clrf digit_cursor_pos
+Warning[203]: Found opcode in column 1. (clrf)
+0028   01D8           00141 clrf current_part
+Warning[203]: Found opcode in column 1. (clrf)
+0029   01A5           00142 clrf digit_array1_0
+Warning[203]: Found opcode in column 1. (clrf)
+002A   01A6           00143 clrf digit_array1_1
+Warning[203]: Found opcode in column 1. (clrf)
+002B   01A7           00144 clrf digit_array1_2
+Warning[203]: Found opcode in column 1. (clrf)
+002C   01A8           00145 clrf digit_array1_3
+Warning[203]: Found opcode in column 1. (clrf)
+002D   01A9           00146 clrf digit_array1_4
+Warning[203]: Found opcode in column 1. (clrf)
+002E   01AA           00147 clrf digit_array1_5
+Warning[203]: Found opcode in column 1. (clrf)
+002F   01AB           00148 clrf digit_array1_6
+Warning[203]: Found opcode in column 1. (clrf)
+0030   01AC           00149 clrf digit_array1_7
+Warning[203]: Found opcode in column 1. (clrf)
+0031   01AD           00150 clrf digit_array1_8
+MPASM  5.43                       PROJECT.ASM   7-6-2025  21:11:22         PAGE  5
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+Warning[203]: Found opcode in column 1. (clrf)
+0032   01AE           00151 clrf digit_array1_9
+Warning[203]: Found opcode in column 1. (clrf)
+0033   01AF           00152 clrf digit_array1_10
+Warning[203]: Found opcode in column 1. (clrf)
+0034   01B0           00153 clrf digit_array1_11
+Warning[203]: Found opcode in column 1. (clrf)
+0035   01B1           00154 clrf digit_array2_0
+Warning[203]: Found opcode in column 1. (clrf)
+0036   01B2           00155 clrf digit_array2_1
+Warning[203]: Found opcode in column 1. (clrf)
+0037   01B3           00156 clrf digit_array2_2
+Warning[203]: Found opcode in column 1. (clrf)
+0038   01B4           00157 clrf digit_array2_3
+Warning[203]: Found opcode in column 1. (clrf)
+0039   01B5           00158 clrf digit_array2_4
+Warning[203]: Found opcode in column 1. (clrf)
+003A   01B6           00159 clrf digit_array2_5
+Warning[203]: Found opcode in column 1. (clrf)
+003B   01B7           00160 clrf digit_array2_6
+Warning[203]: Found opcode in column 1. (clrf)
+003C   01B8           00161 clrf digit_array2_7
+Warning[203]: Found opcode in column 1. (clrf)
+003D   01B9           00162 clrf digit_array2_8
+Warning[203]: Found opcode in column 1. (clrf)
+003E   01BA           00163 clrf digit_array2_9
+Warning[203]: Found opcode in column 1. (clrf)
+003F   01BB           00164 clrf digit_array2_10
+Warning[203]: Found opcode in column 1. (clrf)
+0040   01BC           00165 clrf digit_array2_11
+Warning[203]: Found opcode in column 1. (clrf)
+0041   01BD           00166 clrf result_array_0
+Warning[203]: Found opcode in column 1. (clrf)
+0042   01BE           00167 clrf result_array_1
+Warning[203]: Found opcode in column 1. (clrf)
+0043   01BF           00168 clrf result_array_2
+Warning[203]: Found opcode in column 1. (clrf)
+0044   01C0           00169 clrf result_array_3
+Warning[203]: Found opcode in column 1. (clrf)
+0045   01C1           00170 clrf result_array_4
+Warning[203]: Found opcode in column 1. (clrf)
+0046   01C2           00171 clrf result_array_5
+Warning[203]: Found opcode in column 1. (clrf)
+0047   01C3           00172 clrf result_array_6
+Warning[203]: Found opcode in column 1. (clrf)
+0048   01C4           00173 clrf result_array_7
+Warning[203]: Found opcode in column 1. (clrf)
+0049   01C5           00174 clrf result_array_8
+Warning[203]: Found opcode in column 1. (clrf)
+004A   01C6           00175 clrf result_array_9
+Warning[203]: Found opcode in column 1. (clrf)
+004B   01C7           00176 clrf result_array_10
+Warning[203]: Found opcode in column 1. (clrf)
+MPASM  5.43                       PROJECT.ASM   7-6-2025  21:11:22         PAGE  6
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+004C   01C8           00177 clrf result_array_11
+Warning[203]: Found opcode in column 1. (clrf)
+004D   01C9           00178 clrf resultDone
+Warning[203]: Found opcode in column 1. (clrf)
+004E   01A3           00179 clrf current_digit_value
+Warning[203]: Found opcode in column 1. (clrf)
+004F   01CA           00180 clrf timer1_enabled
+Warning[203]: Found opcode in column 1. (clrf)
+0050   01CB           00181 clrf button_first_press
+Warning[203]: Found opcode in column 1. (clrf)
+0051   01CC           00182 clrf screen1
+Warning[203]: Found opcode in column 1. (clrf)
+0052   01CD           00183 clrf transmit_index
+Warning[203]: Found opcode in column 1. (clrf)
+0053   01CE           00184 clrf number_transmitted
+Warning[203]: Found opcode in column 1. (clrf)
+0054   01CF           00185 clrf number2_transmitted
+Warning[203]: Found opcode in column 1. (clrf)
+0055   01D0           00186 clrf result_received
+Warning[203]: Found opcode in column 1. (clrf)
+0056   01D1           00187 clrf calculation_done
+Warning[203]: Found opcode in column 1. (clrf)
+0057   01D2           00188 clrf digit_index
+Warning[203]: Found opcode in column 1. (movlw)
+0058   3028           00189 movlw TIMEOUT_2_SECONDS
+Warning[203]: Found opcode in column 1. (movwf)
+0059   00D4           00190 movwf timeout_counter
+Warning[203]: Found opcode in column 1. (clrf)
+005A   01D5           00191 clrf timeout_active
+Warning[203]: Found opcode in column 1. (clrf)
+005B   01D6           00192 clrf click_timer
+Warning[203]: Found opcode in column 1. (clrf)
+005C   01D7           00193 clrf click_count
+                      00194 ; Initialize new equals screen state
+Warning[203]: Found opcode in column 1. (clrf)
+005D   01D9           00195 clrf showing_equals_screen
+                      00196 ; Initialize propagation variables
+Warning[203]: Found opcode in column 1. (clrf)
+005E   01DA           00197 clrf propagation_value
+Warning[203]: Found opcode in column 1. (clrf)
+005F   01DB           00198 clrf propagation_index
+                      00199 ; Initialize result display cycling
+Warning[203]: Found opcode in column 1. (clrf)
+0060   01DC           00200 clrf result_display_state
+Warning[203]: Found opcode in column 1. (clrf)
+0061   01DD           00201 clrf result_displayed_once
+                      00202 
+                      00203 ; Initialize LCD
+Warning[203]: Found opcode in column 1. (CALL)
+0062   2???           00204 CALL inid
+                      00205 
+                      00206 ; Show welcome message
+Warning[203]: Found opcode in column 1. (CALL)
+MPASM  5.43                       PROJECT.ASM   7-6-2025  21:11:22         PAGE  7
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+0063   2???           00207 CALL print_welcome
+                      00208 
+                      00209 ; Blink display 3 times
+Warning[203]: Found opcode in column 1. (movlw)
+0064   3003           00210 movlw .3
+Warning[203]: Found opcode in column 1. (movwf)
+0065   00A1           00211 movwf blink_counter
+0066                  00212 blink_loop:
+Warning[203]: Found opcode in column 1. (CALL)
+0066   2???           00213 CALL delay_500ms
+Warning[203]: Found opcode in column 1. (MOVLW)
+0067   3008           00214 MOVLW 0x08
+Warning[203]: Found opcode in column 1. (CALL)
+0068   2???           00215 CALL lcd_cmd
+Warning[203]: Found opcode in column 1. (CALL)
+0069   2???           00216 CALL delay_500ms
+Warning[203]: Found opcode in column 1. (MOVLW)
+006A   300C           00217 MOVLW 0x0c
+Warning[203]: Found opcode in column 1. (CALL)
+006B   2???           00218 CALL lcd_cmd
+Warning[203]: Found opcode in column 1. (decfsz)
+006C   0BA1           00219 decfsz blink_counter, 1
+Warning[203]: Found opcode in column 1. (goto)
+006D   2???           00220 goto blink_loop
+                      00221 
+                      00222 ; Delay before starting input
+Warning[203]: Found opcode in column 1. (CALL)
+006E   2???           00223 CALL delay_500ms
+Warning[203]: Found opcode in column 1. (CALL)
+006F   2???           00224 CALL delay_500ms
+Warning[203]: Found opcode in column 1. (CALL)
+0070   2???           00225 CALL delay_500ms
+Warning[203]: Found opcode in column 1. (CALL)
+0071   2???           00226 CALL delay_500ms
+                      00227 
+                      00228 ; Show first number input screen
+Warning[203]: Found opcode in column 1. (CALL)
+0072   2???           00229 CALL show_the_first_num
+                      00230 
+                      00231 ; Start timeout
+Warning[203]: Found opcode in column 1. (CALL)
+0073   2???           00232 CALL start_timeout
+                      00233 
+                      00234 ; Enable interrupts
+Warning[205]: Found directive in column 1. (BANKSEL)
+0074   1283 1303      00235 BANKSEL INTCON
+Warning[203]: Found opcode in column 1. (BSF)
+0076   160B           00236 BSF INTCON, INTE
+Warning[203]: Found opcode in column 1. (BSF)
+0077   170B           00237 BSF INTCON, PEIE
+Warning[203]: Found opcode in column 1. (BSF)
+0078   178B           00238 BSF INTCON, GIE
+Warning[203]: Found opcode in column 1. (BCF)
+MPASM  5.43                       PROJECT.ASM   7-6-2025  21:11:22         PAGE  8
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+0079   108B           00239 BCF INTCON, INTF
+                      00240 
+007A                  00241 main_loop:
+                      00242 ; Check if showing equals screen
+Warning[203]: Found opcode in column 1. (btfsc)
+007A   1859           00243 btfsc showing_equals_screen, 0
+Warning[203]: Found opcode in column 1. (goto)
+007B   2???           00244 goto main_loop_continue
+                      00245 ; Check if calculation is done and display result (only once)
+Warning[203]: Found opcode in column 1. (btfsc)
+007C   1851           00246 btfsc calculation_done, 0
+Warning[203]: Found opcode in column 1. (goto)
+007D   2???           00247 goto handle_result_mode
+007E                  00248 main_loop_continue:
+Warning[203]: Found opcode in column 1. (goto)
+007E   2???           00249 goto main_loop
+                      00250 
+007F                  00251 handle_result_mode:
+                      00252 ; Check if we've already displayed the result
+Warning[203]: Found opcode in column 1. (btfsc)
+007F   185D           00253 btfsc result_displayed_once, 0
+Warning[203]: Found opcode in column 1. (goto)
+0080   2???           00254 goto main_loop_continue
+                      00255 ; Display result for the first time
+Warning[203]: Found opcode in column 1. (call)
+0081   2???           00256 call display_result_screen
+                      00257 ; Mark that we've displayed the result
+Warning[203]: Found opcode in column 1. (bsf)
+0082   145D           00258 bsf result_displayed_once, 0
+Warning[203]: Found opcode in column 1. (goto)
+0083   2???           00259 goto main_loop_continue
+                      00260 
+                      00261 ;----------------------------------------INTERRUPT SERVICE ROUTINE--------------------------------------
+                            -----------------------
+0084                  00262 ISR_handler:
+Warning[203]: Found opcode in column 1. (movwf)
+0084   00A2           00263 movwf temp_char
+                      00264 
+                      00265 ; Check what caused the interrupt
+Warning[205]: Found directive in column 1. (BANKSEL)
+0085   1283 1303      00266 BANKSEL PIR1
+Warning[203]: Found opcode in column 1. (btfsc)
+0087   180C           00267 btfsc PIR1, TMR1IF
+Warning[203]: Found opcode in column 1. (goto)
+0088   2???           00268 goto timer1_interrupt
+                      00269 
+                      00270 ; External interrupt (button press)
+Warning[205]: Found directive in column 1. (BANKSEL)
+0089   1283 1303      00271 BANKSEL INTCON
+Warning[203]: Found opcode in column 1. (btfsc)
+008B   188B           00272 btfsc INTCON, INTF
+Warning[203]: Found opcode in column 1. (goto)
+008C   2???           00273 goto button_interrupt
+MPASM  5.43                       PROJECT.ASM   7-6-2025  21:11:22         PAGE  9
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00274 
+                      00275 
+Warning[203]: Found opcode in column 1. (BTFSS)
+008D   1E8C           00276 BTFSS   PIR1, RCIF         ; Check if the USART received a byte
+Warning[203]: Found opcode in column 1. (GOTO)
+008E   2???           00277 GOTO    isr_exit           ; If not, exit interrupt, if yes, read the value
+Warning[205]: Found directive in column 1. (BANKSEL)
+008F   1283 1303      00278 BANKSEL RCREG
+Warning[203]: Found opcode in column 1. (MOVF)
+0091   081A           00279 MOVF    RCREG, 0           ; Read received byte from UART
+Warning[203]: Found opcode in column 1. (MOVWF)
+0092   00D3           00280 MOVWF   received_digit     ; Store it in 'received_digit'
+Warning[203]: Found opcode in column 1. (goto)
+0093   2???           00281 goto readResult
+                      00282 
+Warning[203]: Found opcode in column 1. (goto)
+0094   2???           00283 goto isr_exit
+                      00284 
+0095                  00285 readResult:
+Warning[203]: Found opcode in column 1. (MOVF)
+0095   0852           00286 MOVF    digit_index, 0
+Warning[203]: Found opcode in column 1. (ADDLW)
+0096   3E3D           00287 ADDLW   result_array_0
+Warning[203]: Found opcode in column 1. (MOVWF)
+0097   0084           00288 MOVWF   FSR
+Warning[203]: Found opcode in column 1. (MOVF)
+0098   0853           00289 MOVF    received_digit, 0
+Warning[203]: Found opcode in column 1. (MOVWF)
+0099   0080           00290 MOVWF   INDF
+Warning[203]: Found opcode in column 1. (INCF)
+009A   0AD2           00291 INCF    digit_index, 1
+Warning[203]: Found opcode in column 1. (MOVF)
+009B   0852           00292 MOVF    digit_index, 0
+Warning[203]: Found opcode in column 1. (SUBLW)
+009C   3C0C           00293 SUBLW   .12
+Warning[203]: Found opcode in column 1. (BTFSS)
+009D   1D03           00294 BTFSS   STATUS, Z
+Warning[203]: Found opcode in column 1. (GOTO)
+009E   2???           00295 GOTO    isr_exit
+Warning[203]: Found opcode in column 1. (MOVLW)
+009F   3001           00296 MOVLW   .1
+Warning[203]: Found opcode in column 1. (MOVWF)
+00A0   00D1           00297 MOVWF   calculation_done
+                      00298 ; Clear equals screen flag since we're now showing result
+Warning[203]: Found opcode in column 1. (bcf)
+00A1   1059           00299 bcf     showing_equals_screen, 0
+Warning[203]: Found opcode in column 1. (CLRF)
+00A2   01D2           00300 CLRF    digit_index
+                      00301 ; Let main loop handle display - don't call display functions from ISR
+Warning[203]: Found opcode in column 1. (GOTO)
+00A3   2???           00302 GOTO    isr_exit
+                      00303 
+00A4                  00304 timer1_interrupt:
+MPASM  5.43                       PROJECT.ASM   7-6-2025  21:11:22         PAGE 10
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00305 ; Clear Timer1 interrupt flag
+Warning[205]: Found directive in column 1. (BANKSEL)
+00A4   1283 1303      00306 BANKSEL PIR1
+Warning[203]: Found opcode in column 1. (BCF)
+00A6   100C           00307 BCF PIR1, TMR1IF
+                      00308 
+                      00309 ; Reload Timer1 for next 10ms
+Warning[205]: Found directive in column 1. (BANKSEL)
+00A7   1283 1303      00310 BANKSEL TMR1H
+Warning[203]: Found opcode in column 1. (MOVLW)
+00A9   30EC           00311 MOVLW 0xEC
+Warning[203]: Found opcode in column 1. (MOVWF)
+00AA   008F           00312 MOVWF TMR1H
+Warning[203]: Found opcode in column 1. (MOVLW)
+00AB   3078           00313 MOVLW 0x78
+Warning[203]: Found opcode in column 1. (MOVWF)
+00AC   008E           00314 MOVWF TMR1L
+                      00315 
+                      00316 ; Handle click timer for double-click detection
+Warning[203]: Found opcode in column 1. (movf)
+00AD   0856           00317 movf click_timer, 0
+Warning[203]: Found opcode in column 1. (btfsc)
+00AE   1903           00318 btfsc STATUS, Z
+Warning[203]: Found opcode in column 1. (goto)
+00AF   2???           00319 goto check_main_timeout
+Warning[203]: Found opcode in column 1. (decfsz)
+00B0   0BD6           00320 decfsz click_timer, 1
+Warning[203]: Found opcode in column 1. (goto)
+00B1   2???           00321 goto check_main_timeout
+                      00322 ; Click timer expired - reset click count
+Warning[203]: Found opcode in column 1. (clrf)
+00B2   01D7           00323 clrf click_count
+                      00324 
+00B3                  00325 check_main_timeout:
+                      00326 ; Skip timeout if showing equals screen
+Warning[203]: Found opcode in column 1. (btfsc)
+00B3   1859           00327 btfsc showing_equals_screen, 0
+Warning[203]: Found opcode in column 1. (goto)
+00B4   2???           00328 goto isr_exit
+                      00329 
+                      00330 ; Check if main timeout is active
+Warning[203]: Found opcode in column 1. (btfss)
+00B5   1C55           00331 btfss timeout_active, 0
+Warning[203]: Found opcode in column 1. (goto)
+00B6   2???           00332 goto isr_exit
+                      00333 
+                      00334 ; Decrement main timeout counter
+Warning[203]: Found opcode in column 1. (decfsz)
+00B7   0BD4           00335 decfsz timeout_counter, 1
+Warning[203]: Found opcode in column 1. (goto)
+00B8   2???           00336 goto isr_exit
+                      00337 
+                      00338 ; FIXED: Simple timeout occurred - do propagation and advance in one atomic operation
+MPASM  5.43                       PROJECT.ASM   7-6-2025  21:11:22         PAGE 11
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00339 ; First, disable timeout to prevent re-entry
+Warning[203]: Found opcode in column 1. (bcf)
+00B9   1055           00340 bcf timeout_active, 0
+                      00341 
+                      00342 ; Do propagation
+Warning[203]: Found opcode in column 1. (call)
+00BA   2???           00343 call do_propagation_only
+                      00344 
+                      00345 ; Advance cursor
+Warning[203]: Found opcode in column 1. (call)
+00BB   2???           00346 call do_cursor_advance_only
+                      00347 
+                      00348 ; Re-enable timeout with fresh 2-second counter
+Warning[203]: Found opcode in column 1. (movlw)
+00BC   3028           00349 movlw TIMEOUT_2_SECONDS
+Warning[203]: Found opcode in column 1. (movwf)
+00BD   00D4           00350 movwf timeout_counter
+Warning[203]: Found opcode in column 1. (bsf)
+00BE   1455           00351 bsf timeout_active, 0
+                      00352 
+Warning[203]: Found opcode in column 1. (goto)
+00BF   2???           00353 goto isr_exit
+                      00354 
+00C0                  00355 button_interrupt:
+                      00356 ; Clear the interrupt flag
+Warning[205]: Found directive in column 1. (BANKSEL)
+00C0   1283 1303      00357 BANKSEL INTCON
+Warning[203]: Found opcode in column 1. (BCF)
+00C2   108B           00358 BCF INTCON, INTF
+                      00359 
+                      00360 ; Simple debounce
+Warning[203]: Found opcode in column 1. (call)
+00C3   2???           00361 call debounce
+                      00362 
+                      00363 ; Check if button is still pressed (active low)
+Warning[203]: Found opcode in column 1. (btfsc)
+00C4   1806           00364 btfsc PORTB, pushButton
+Warning[203]: Found opcode in column 1. (goto)
+00C5   2???           00365 goto isr_exit
+                      00366 
+                      00367 ; Handle button click
+Warning[203]: Found opcode in column 1. (call)
+00C6   2???           00368 call handle_button_click
+                      00369 
+00C7                  00370 isr_exit:
+Warning[203]: Found opcode in column 1. (movf)
+00C7   0822           00371 movf temp_char, 0
+Warning[203]: Found opcode in column 1. (RETFIE)
+00C8   0009           00372 RETFIE
+                      00373 
+                      00374 ;----------------------------------------FIXED: SIMPLIFIED PROPAGATION FUNCTIONS------------------------
+                            -------------------------------------
+00C9                  00375 do_propagation_only:
+MPASM  5.43                       PROJECT.ASM   7-6-2025  21:11:22         PAGE 12
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00376 ; Simple propagation without any timeout manipulation
+Warning[203]: Found opcode in column 1. (movlw)
+00C9   3001           00377 movlw .1
+Warning[203]: Found opcode in column 1. (subwf)
+00CA   024C           00378 subwf screen1, 0
+Warning[203]: Found opcode in column 1. (btfss)
+00CB   1D03           00379 btfss STATUS, Z
+Warning[203]: Found opcode in column 1. (goto)
+00CC   2???           00380 goto do_prop_num1
+                      00381 ; Screen 2 - Number 2
+Warning[203]: Found opcode in column 1. (call)
+00CD   2???           00382 call get_digit_value_num2
+Warning[203]: Found opcode in column 1. (call)
+00CE   2???           00383 call propagate_remaining_num2
+                      00384 ; Update display
+Warning[203]: Found opcode in column 1. (MOVLW)
+00CF   30C0           00385 MOVLW 0xc0
+Warning[203]: Found opcode in column 1. (CALL)
+00D0   2???           00386 CALL lcd_cmd
+Warning[203]: Found opcode in column 1. (CALL)
+00D1   2???           00387 CALL display_all_digits_2
+Warning[203]: Found opcode in column 1. (return)
+00D2   0008           00388 return
+                      00389 
+00D3                  00390 do_prop_num1:
+                      00391 ; Screen 1 - Number 1
+Warning[203]: Found opcode in column 1. (call)
+00D3   2???           00392 call get_digit_value_num1
+Warning[203]: Found opcode in column 1. (call)
+00D4   2???           00393 call propagate_remaining_num1
+                      00394 ; Update display
+Warning[203]: Found opcode in column 1. (MOVLW)
+00D5   30C0           00395 MOVLW 0xc0
+Warning[203]: Found opcode in column 1. (CALL)
+00D6   2???           00396 CALL lcd_cmd
+Warning[203]: Found opcode in column 1. (CALL)
+00D7   2???           00397 CALL display_all_digits_1
+Warning[203]: Found opcode in column 1. (return)
+00D8   0008           00398 return
+                      00399 
+                      00400 ; NEW FEATURE: Propagation for double-click transitions
+00D9                  00401 do_propagation_for_double_click:
+                      00402 ; Propagate current digit before transitioning
+Warning[203]: Found opcode in column 1. (movlw)
+00D9   3001           00403 movlw .1
+Warning[203]: Found opcode in column 1. (subwf)
+00DA   024C           00404 subwf screen1, 0
+Warning[203]: Found opcode in column 1. (btfss)
+00DB   1D03           00405 btfss STATUS, Z
+Warning[203]: Found opcode in column 1. (goto)
+00DC   2???           00406 goto prop_double_click_num1
+                      00407 ; Screen 2 - Number 2
+Warning[203]: Found opcode in column 1. (call)
+MPASM  5.43                       PROJECT.ASM   7-6-2025  21:11:22         PAGE 13
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+00DD   2???           00408 call get_digit_value_num2
+Warning[203]: Found opcode in column 1. (call)
+00DE   2???           00409 call propagate_remaining_num2
+Warning[203]: Found opcode in column 1. (return)
+00DF   0008           00410 return
+                      00411 
+00E0                  00412 prop_double_click_num1:
+                      00413 ; Screen 1 - Number 1
+Warning[203]: Found opcode in column 1. (call)
+00E0   2???           00414 call get_digit_value_num1
+Warning[203]: Found opcode in column 1. (call)
+00E1   2???           00415 call propagate_remaining_num1
+Warning[203]: Found opcode in column 1. (return)
+00E2   0008           00416 return
+                      00417 
+00E3                  00418 do_cursor_advance_only:
+                      00419 ; Simple cursor advancement without timeout manipulation
+Warning[203]: Found opcode in column 1. (btfsc)
+00E3   1858           00420 btfsc current_part, 0
+Warning[203]: Found opcode in column 1. (goto)
+00E4   2???           00421 goto advance_frac_simple
+Warning[203]: Found opcode in column 1. (goto)
+00E5   2???           00422 goto advance_int_simple
+                      00423 
+00E6                  00424 advance_int_simple:
+                      00425 ; Advance in integer part (0-5)
+Warning[203]: Found opcode in column 1. (incf)
+00E6   0AA4           00426 incf digit_cursor_pos, 1
+Warning[203]: Found opcode in column 1. (movf)
+00E7   0824           00427 movf digit_cursor_pos, 0
+Warning[203]: Found opcode in column 1. (sublw)
+00E8   3C06           00428 sublw .6
+Warning[203]: Found opcode in column 1. (btfsc)
+00E9   1903           00429 btfsc STATUS, Z
+Warning[203]: Found opcode in column 1. (goto)
+00EA   2???           00430 goto stay_at_int_end_simple
+                      00431 ; Position cursor and enable blinking
+Warning[203]: Found opcode in column 1. (movlw)
+00EB   300F           00432 movlw 0x0F
+Warning[203]: Found opcode in column 1. (call)
+00EC   2???           00433 call lcd_cmd
+Warning[203]: Found opcode in column 1. (call)
+00ED   2???           00434 call position_cursor
+Warning[203]: Found opcode in column 1. (return)
+00EE   0008           00435 return
+                      00436 
+00EF                  00437 stay_at_int_end_simple:
+Warning[203]: Found opcode in column 1. (movlw)
+00EF   3005           00438 movlw .5
+Warning[203]: Found opcode in column 1. (movwf)
+00F0   00A4           00439 movwf digit_cursor_pos
+Warning[203]: Found opcode in column 1. (movlw)
+00F1   300F           00440 movlw 0x0F
+MPASM  5.43                       PROJECT.ASM   7-6-2025  21:11:22         PAGE 14
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+Warning[203]: Found opcode in column 1. (call)
+00F2   2???           00441 call lcd_cmd
+Warning[203]: Found opcode in column 1. (call)
+00F3   2???           00442 call position_cursor
+Warning[203]: Found opcode in column 1. (return)
+00F4   0008           00443 return
+                      00444 
+00F5                  00445 advance_frac_simple:
+                      00446 ; Advance in fractional part (7-12)
+Warning[203]: Found opcode in column 1. (incf)
+00F5   0AA4           00447 incf digit_cursor_pos, 1
+Warning[203]: Found opcode in column 1. (movf)
+00F6   0824           00448 movf digit_cursor_pos, 0
+Warning[203]: Found opcode in column 1. (sublw)
+00F7   3C0D           00449 sublw .13
+Warning[203]: Found opcode in column 1. (btfsc)
+00F8   1903           00450 btfsc STATUS, Z
+Warning[203]: Found opcode in column 1. (goto)
+00F9   2???           00451 goto stay_at_frac_end_simple
+                      00452 ; Position cursor and enable blinking
+Warning[203]: Found opcode in column 1. (movlw)
+00FA   300F           00453 movlw 0x0F
+Warning[203]: Found opcode in column 1. (call)
+00FB   2???           00454 call lcd_cmd
+Warning[203]: Found opcode in column 1. (call)
+00FC   2???           00455 call position_cursor
+Warning[203]: Found opcode in column 1. (return)
+00FD   0008           00456 return
+                      00457 
+00FE                  00458 stay_at_frac_end_simple:
+Warning[203]: Found opcode in column 1. (movlw)
+00FE   300C           00459 movlw .12
+Warning[203]: Found opcode in column 1. (movwf)
+00FF   00A4           00460 movwf digit_cursor_pos
+Warning[203]: Found opcode in column 1. (movlw)
+0100   300F           00461 movlw 0x0F
+Warning[203]: Found opcode in column 1. (call)
+0101   2???           00462 call lcd_cmd
+Warning[203]: Found opcode in column 1. (call)
+0102   2???           00463 call position_cursor
+Warning[203]: Found opcode in column 1. (return)
+0103   0008           00464 return
+                      00465 
+0104                  00466 get_digit_value_num1:
+                      00467 ; Get value of current digit in number 1
+Warning[203]: Found opcode in column 1. (movf)
+0104   0824           00468 movf digit_cursor_pos, 0
+Warning[203]: Found opcode in column 1. (sublw)
+0105   3C06           00469 sublw .6
+Warning[203]: Found opcode in column 1. (btfss)
+0106   1C03           00470 btfss STATUS, C
+Warning[203]: Found opcode in column 1. (goto)
+0107   2???           00471 goto get_frac_digit_1
+MPASM  5.43                       PROJECT.ASM   7-6-2025  21:11:22         PAGE 15
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00472 ; Integer digit (positions 0-5)
+Warning[203]: Found opcode in column 1. (movf)
+0108   0824           00473 movf digit_cursor_pos, 0
+Warning[203]: Found opcode in column 1. (addlw)
+0109   3E25           00474 addlw digit_array1_0
+Warning[203]: Found opcode in column 1. (movwf)
+010A   0084           00475 movwf FSR
+Warning[203]: Found opcode in column 1. (movf)
+010B   0800           00476 movf INDF, 0
+Warning[203]: Found opcode in column 1. (movwf)
+010C   00DA           00477 movwf propagation_value
+Warning[203]: Found opcode in column 1. (return)
+010D   0008           00478 return
+010E                  00479 get_frac_digit_1:
+                      00480 ; Fractional digit (positions 7-12, map to array indices 6-11)
+Warning[203]: Found opcode in column 1. (movf)
+010E   0824           00481 movf digit_cursor_pos, 0
+Warning[203]: Found opcode in column 1. (addlw)
+010F   3EFF           00482 addlw .255              ; Subtract 1 (adjust for decimal point)
+Warning[203]: Found opcode in column 1. (addlw)
+0110   3E25           00483 addlw digit_array1_0
+Warning[203]: Found opcode in column 1. (movwf)
+0111   0084           00484 movwf FSR
+Warning[203]: Found opcode in column 1. (movf)
+0112   0800           00485 movf INDF, 0
+Warning[203]: Found opcode in column 1. (movwf)
+0113   00DA           00486 movwf propagation_value
+Warning[203]: Found opcode in column 1. (return)
+0114   0008           00487 return
+                      00488 
+0115                  00489 get_digit_value_num2:
+                      00490 ; Get value of current digit in number 2
+Warning[203]: Found opcode in column 1. (movf)
+0115   0824           00491 movf digit_cursor_pos, 0
+Warning[203]: Found opcode in column 1. (sublw)
+0116   3C06           00492 sublw .6
+Warning[203]: Found opcode in column 1. (btfss)
+0117   1C03           00493 btfss STATUS, C
+Warning[203]: Found opcode in column 1. (goto)
+0118   2???           00494 goto get_frac_digit_2
+                      00495 ; Integer digit (positions 0-5)
+Warning[203]: Found opcode in column 1. (movf)
+0119   0824           00496 movf digit_cursor_pos, 0
+Warning[203]: Found opcode in column 1. (addlw)
+011A   3E31           00497 addlw digit_array2_0
+Warning[203]: Found opcode in column 1. (movwf)
+011B   0084           00498 movwf FSR
+Warning[203]: Found opcode in column 1. (movf)
+011C   0800           00499 movf INDF, 0
+Warning[203]: Found opcode in column 1. (movwf)
+011D   00DA           00500 movwf propagation_value
+Warning[203]: Found opcode in column 1. (return)
+011E   0008           00501 return
+MPASM  5.43                       PROJECT.ASM   7-6-2025  21:11:22         PAGE 16
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+011F                  00502 get_frac_digit_2:
+                      00503 ; Fractional digit (positions 7-12, map to array indices 6-11)
+Warning[203]: Found opcode in column 1. (movf)
+011F   0824           00504 movf digit_cursor_pos, 0
+Warning[203]: Found opcode in column 1. (addlw)
+0120   3EFF           00505 addlw .255              ; Subtract 1 (adjust for decimal point)
+Warning[203]: Found opcode in column 1. (addlw)
+0121   3E31           00506 addlw digit_array2_0
+Warning[203]: Found opcode in column 1. (movwf)
+0122   0084           00507 movwf FSR
+Warning[203]: Found opcode in column 1. (movf)
+0123   0800           00508 movf INDF, 0
+Warning[203]: Found opcode in column 1. (movwf)
+0124   00DA           00509 movwf propagation_value
+Warning[203]: Found opcode in column 1. (return)
+0125   0008           00510 return
+                      00511 
+0126                  00512 propagate_remaining_num1:
+                      00513 ; Propagate to all remaining digits in number 1 (both integer and fractional)
+Warning[203]: Found opcode in column 1. (movf)
+0126   0824           00514 movf digit_cursor_pos, 0
+Warning[203]: Found opcode in column 1. (addlw)
+0127   3E01           00515 addlw .1                ; Start from next position
+Warning[203]: Found opcode in column 1. (movwf)
+0128   00DB           00516 movwf propagation_index
+                      00517 
+0129                  00518 prop_loop_1:
+                      00519 ; Check if we've reached the end of all digits (position 13)
+Warning[203]: Found opcode in column 1. (movf)
+0129   085B           00520 movf propagation_index, 0
+Warning[203]: Found opcode in column 1. (sublw)
+012A   3C0D           00521 sublw .13
+Warning[203]: Found opcode in column 1. (btfsc)
+012B   1903           00522 btfsc STATUS, Z
+Warning[203]: Found opcode in column 1. (return)
+012C   0008           00523 return                  ; End of propagation
+                      00524 
+                      00525 ; Skip position 6 (decimal point)
+Warning[203]: Found opcode in column 1. (movf)
+012D   085B           00526 movf propagation_index, 0
+Warning[203]: Found opcode in column 1. (sublw)
+012E   3C06           00527 sublw .6
+Warning[203]: Found opcode in column 1. (btfsc)
+012F   1903           00528 btfsc STATUS, Z
+Warning[203]: Found opcode in column 1. (goto)
+0130   2???           00529 goto skip_decimal_1
+                      00530 
+                      00531 ; Map position to array index
+Warning[203]: Found opcode in column 1. (movf)
+0131   085B           00532 movf propagation_index, 0
+Warning[203]: Found opcode in column 1. (sublw)
+0132   3C06           00533 sublw .6
+Warning[203]: Found opcode in column 1. (btfss)
+MPASM  5.43                       PROJECT.ASM   7-6-2025  21:11:22         PAGE 17
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+0133   1C03           00534 btfss STATUS, C
+Warning[203]: Found opcode in column 1. (goto)
+0134   2???           00535 goto prop_frac_1
+                      00536 
+                      00537 ; Integer position (0-5)
+Warning[203]: Found opcode in column 1. (movf)
+0135   085B           00538 movf propagation_index, 0
+Warning[203]: Found opcode in column 1. (addlw)
+0136   3E25           00539 addlw digit_array1_0
+Warning[203]: Found opcode in column 1. (movwf)
+0137   0084           00540 movwf FSR
+Warning[203]: Found opcode in column 1. (movf)
+0138   085A           00541 movf propagation_value, 0
+Warning[203]: Found opcode in column 1. (movwf)
+0139   0080           00542 movwf INDF
+Warning[203]: Found opcode in column 1. (goto)
+013A   2???           00543 goto next_pos_1
+                      00544 
+013B                  00545 prop_frac_1:
+                      00546 ; Fractional position (7-12, map to array indices 6-11)
+Warning[203]: Found opcode in column 1. (movf)
+013B   085B           00547 movf propagation_index, 0
+Warning[203]: Found opcode in column 1. (addlw)
+013C   3EFF           00548 addlw .255              ; Subtract 1
+Warning[203]: Found opcode in column 1. (addlw)
+013D   3E25           00549 addlw digit_array1_0
+Warning[203]: Found opcode in column 1. (movwf)
+013E   0084           00550 movwf FSR
+Warning[203]: Found opcode in column 1. (movf)
+013F   085A           00551 movf propagation_value, 0
+Warning[203]: Found opcode in column 1. (movwf)
+0140   0080           00552 movwf INDF
+Warning[203]: Found opcode in column 1. (goto)
+0141   2???           00553 goto next_pos_1
+                      00554 
+0142                  00555 skip_decimal_1:
+                      00556 ; Skip decimal point position
+Warning[203]: Found opcode in column 1. (goto)
+0142   2???           00557 goto next_pos_1
+                      00558 
+0143                  00559 next_pos_1:
+Warning[203]: Found opcode in column 1. (incf)
+0143   0ADB           00560 incf propagation_index, 1
+Warning[203]: Found opcode in column 1. (goto)
+0144   2???           00561 goto prop_loop_1
+                      00562 
+0145                  00563 propagate_remaining_num2:
+                      00564 ; Propagate to all remaining digits in number 2 (both integer and fractional)
+Warning[203]: Found opcode in column 1. (movf)
+0145   0824           00565 movf digit_cursor_pos, 0
+Warning[203]: Found opcode in column 1. (addlw)
+0146   3E01           00566 addlw .1                ; Start from next position
+Warning[203]: Found opcode in column 1. (movwf)
+MPASM  5.43                       PROJECT.ASM   7-6-2025  21:11:22         PAGE 18
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+0147   00DB           00567 movwf propagation_index
+                      00568 
+0148                  00569 prop_loop_2:
+                      00570 ; Check if we've reached the end of all digits (position 13)
+Warning[203]: Found opcode in column 1. (movf)
+0148   085B           00571 movf propagation_index, 0
+Warning[203]: Found opcode in column 1. (sublw)
+0149   3C0D           00572 sublw .13
+Warning[203]: Found opcode in column 1. (btfsc)
+014A   1903           00573 btfsc STATUS, Z
+Warning[203]: Found opcode in column 1. (return)
+014B   0008           00574 return                  ; End of propagation
+                      00575 
+                      00576 ; Skip position 6 (decimal point)
+Warning[203]: Found opcode in column 1. (movf)
+014C   085B           00577 movf propagation_index, 0
+Warning[203]: Found opcode in column 1. (sublw)
+014D   3C06           00578 sublw .6
+Warning[203]: Found opcode in column 1. (btfsc)
+014E   1903           00579 btfsc STATUS, Z
+Warning[203]: Found opcode in column 1. (goto)
+014F   2???           00580 goto skip_decimal_2
+                      00581 
+                      00582 ; Map position to array index
+Warning[203]: Found opcode in column 1. (movf)
+0150   085B           00583 movf propagation_index, 0
+Warning[203]: Found opcode in column 1. (sublw)
+0151   3C06           00584 sublw .6
+Warning[203]: Found opcode in column 1. (btfss)
+0152   1C03           00585 btfss STATUS, C
+Warning[203]: Found opcode in column 1. (goto)
+0153   2???           00586 goto prop_frac_2
+                      00587 
+                      00588 ; Integer position (0-5)
+Warning[203]: Found opcode in column 1. (movf)
+0154   085B           00589 movf propagation_index, 0
+Warning[203]: Found opcode in column 1. (addlw)
+0155   3E31           00590 addlw digit_array2_0
+Warning[203]: Found opcode in column 1. (movwf)
+0156   0084           00591 movwf FSR
+Warning[203]: Found opcode in column 1. (movf)
+0157   085A           00592 movf propagation_value, 0
+Warning[203]: Found opcode in column 1. (movwf)
+0158   0080           00593 movwf INDF
+Warning[203]: Found opcode in column 1. (goto)
+0159   2???           00594 goto next_pos_2
+                      00595 
+015A                  00596 prop_frac_2:
+                      00597 ; Fractional position (7-12, map to array indices 6-11)
+Warning[203]: Found opcode in column 1. (movf)
+015A   085B           00598 movf propagation_index, 0
+Warning[203]: Found opcode in column 1. (addlw)
+015B   3EFF           00599 addlw .255              ; Subtract 1
+MPASM  5.43                       PROJECT.ASM   7-6-2025  21:11:22         PAGE 19
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+Warning[203]: Found opcode in column 1. (addlw)
+015C   3E31           00600 addlw digit_array2_0
+Warning[203]: Found opcode in column 1. (movwf)
+015D   0084           00601 movwf FSR
+Warning[203]: Found opcode in column 1. (movf)
+015E   085A           00602 movf propagation_value, 0
+Warning[203]: Found opcode in column 1. (movwf)
+015F   0080           00603 movwf INDF
+Warning[203]: Found opcode in column 1. (goto)
+0160   2???           00604 goto next_pos_2
+                      00605 
+0161                  00606 skip_decimal_2:
+                      00607 ; Skip decimal point position
+Warning[203]: Found opcode in column 1. (goto)
+0161   2???           00608 goto next_pos_2
+                      00609 
+0162                  00610 next_pos_2:
+Warning[203]: Found opcode in column 1. (incf)
+0162   0ADB           00611 incf propagation_index, 1
+Warning[203]: Found opcode in column 1. (goto)
+0163   2???           00612 goto prop_loop_2
+                      00613 
+                      00614 ;----------------------------------------BUTTON HANDLING------------------------------------------------
+                            -------------
+0164                  00615 handle_button_click:
+                      00616 ; Check if calculation is done - handle result display cycling
+Warning[203]: Found opcode in column 1. (btfsc)
+0164   1851           00617 btfsc calculation_done, 0
+Warning[203]: Found opcode in column 1. (goto)
+0165   2???           00618 goto handle_result_display_cycling
+                      00619 
+                      00620 ; Check if we're showing equals screen (before calculation)
+Warning[203]: Found opcode in column 1. (btfsc)
+0166   1859           00621 btfsc showing_equals_screen, 0
+Warning[203]: Found opcode in column 1. (goto)
+0167   2???           00622 goto handle_equals_screen_click
+                      00623 
+                      00624 ; Normal button handling for input screens
+                      00625 ; Reset main timeout when any button press occurs
+Warning[203]: Found opcode in column 1. (call)
+0168   2???           00626 call restart_main_timeout
+                      00627 
+                      00628 ; Increment click count
+Warning[203]: Found opcode in column 1. (incf)
+0169   0AD7           00629 incf click_count, 1
+                      00630 
+                      00631 ; Start/restart click timer for double-click window
+Warning[203]: Found opcode in column 1. (movlw)
+016A   300F           00632 movlw DOUBLE_CLICK_TIMEOUT
+Warning[203]: Found opcode in column 1. (movwf)
+016B   00D6           00633 movwf click_timer
+                      00634 
+                      00635 ; Check click count
+MPASM  5.43                       PROJECT.ASM   7-6-2025  21:11:22         PAGE 20
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+Warning[203]: Found opcode in column 1. (movf)
+016C   0857           00636 movf click_count, 0
+Warning[203]: Found opcode in column 1. (sublw)
+016D   3C01           00637 sublw .1
+Warning[203]: Found opcode in column 1. (btfsc)
+016E   1903           00638 btfsc STATUS, Z
+Warning[203]: Found opcode in column 1. (goto)
+016F   2???           00639 goto handle_single_click
+                      00640 
+Warning[203]: Found opcode in column 1. (movf)
+0170   0857           00641 movf click_count, 0
+Warning[203]: Found opcode in column 1. (sublw)
+0171   3C02           00642 sublw .2
+Warning[203]: Found opcode in column 1. (btfsc)
+0172   1903           00643 btfsc STATUS, Z
+Warning[203]: Found opcode in column 1. (goto)
+0173   2???           00644 goto handle_double_click
+                      00645 
+                      00646 ; More than 2 clicks - reset and treat as single click
+                      00647 ; ENHANCED: If more than 2 clicks, treat them as rapid single clicks
+Warning[203]: Found opcode in column 1. (clrf)
+0174   01D7           00648 clrf click_count
+Warning[203]: Found opcode in column 1. (clrf)
+0175   01D6           00649 clrf click_timer
+                      00650 ; Process as single click
+Warning[203]: Found opcode in column 1. (goto)
+0176   2???           00651 goto handle_single_click
+                      00652 
+0177                  00653 handle_result_display_cycling:
+                      00654 ; Reset main timeout when any button press occurs
+Warning[203]: Found opcode in column 1. (call)
+0177   2???           00655 call restart_main_timeout
+                      00656 
+                      00657 ; Increment click count
+Warning[203]: Found opcode in column 1. (incf)
+0178   0AD7           00658 incf click_count, 1
+                      00659 
+                      00660 ; Start/restart click timer for double-click window
+Warning[203]: Found opcode in column 1. (movlw)
+0179   300F           00661 movlw DOUBLE_CLICK_TIMEOUT
+Warning[203]: Found opcode in column 1. (movwf)
+017A   00D6           00662 movwf click_timer
+                      00663 
+                      00664 ; Check for double-click to restart the process
+Warning[203]: Found opcode in column 1. (movf)
+017B   0857           00665 movf click_count, 0
+Warning[203]: Found opcode in column 1. (sublw)
+017C   3C02           00666 sublw .2
+Warning[203]: Found opcode in column 1. (btfsc)
+017D   1903           00667 btfsc STATUS, Z
+Warning[203]: Found opcode in column 1. (goto)
+017E   2???           00668 goto restart_calculator_process
+                      00669 
+MPASM  5.43                       PROJECT.ASM   7-6-2025  21:11:22         PAGE 21
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00670 ; Single click - cycle through display states: 0=result, 1=first number, 2=second number
+Warning[203]: Found opcode in column 1. (movf)
+017F   0857           00671 movf click_count, 0
+Warning[203]: Found opcode in column 1. (sublw)
+0180   3C01           00672 sublw .1
+Warning[203]: Found opcode in column 1. (btfsc)
+0181   1903           00673 btfsc STATUS, Z
+Warning[203]: Found opcode in column 1. (goto)
+0182   2???           00674 goto handle_single_result_click
+                      00675 
+                      00676 ; More than 2 clicks - reset and treat as single click
+Warning[203]: Found opcode in column 1. (clrf)
+0183   01D7           00677 clrf click_count
+Warning[203]: Found opcode in column 1. (clrf)
+0184   01D6           00678 clrf click_timer
+Warning[203]: Found opcode in column 1. (goto)
+0185   2???           00679 goto handle_single_result_click
+                      00680 
+0186                  00681 handle_single_result_click:
+Warning[203]: Found opcode in column 1. (incf)
+0186   0ADC           00682 incf result_display_state, 1
+Warning[203]: Found opcode in column 1. (movf)
+0187   085C           00683 movf result_display_state, 0
+Warning[203]: Found opcode in column 1. (sublw)
+0188   3C03           00684 sublw .3
+Warning[203]: Found opcode in column 1. (btfsc)
+0189   1903           00685 btfsc STATUS, Z
+Warning[203]: Found opcode in column 1. (clrf)
+018A   01DC           00686 clrf result_display_state
+                      00687 
+                      00688 ; Display based on current state
+Warning[203]: Found opcode in column 1. (movf)
+018B   085C           00689 movf result_display_state, 0
+Warning[203]: Found opcode in column 1. (sublw)
+018C   3C00           00690 sublw .0
+Warning[203]: Found opcode in column 1. (btfsc)
+018D   1903           00691 btfsc STATUS, Z
+Warning[203]: Found opcode in column 1. (goto)
+018E   2???           00692 goto display_result_again
+                      00693 
+Warning[203]: Found opcode in column 1. (movf)
+018F   085C           00694 movf result_display_state, 0
+Warning[203]: Found opcode in column 1. (sublw)
+0190   3C01           00695 sublw .1
+Warning[203]: Found opcode in column 1. (btfsc)
+0191   1903           00696 btfsc STATUS, Z
+Warning[203]: Found opcode in column 1. (goto)
+0192   2???           00697 goto display_first_number_on_result
+                      00698 
+Warning[203]: Found opcode in column 1. (movf)
+0193   085C           00699 movf result_display_state, 0
+Warning[203]: Found opcode in column 1. (sublw)
+0194   3C02           00700 sublw .2
+MPASM  5.43                       PROJECT.ASM   7-6-2025  21:11:22         PAGE 22
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+Warning[203]: Found opcode in column 1. (btfsc)
+0195   1903           00701 btfsc STATUS, Z
+Warning[203]: Found opcode in column 1. (goto)
+0196   2???           00702 goto display_second_number_on_result
+                      00703 
+Warning[203]: Found opcode in column 1. (return)
+0197   0008           00704 return
+                      00705 
+0198                  00706 restart_calculator_process:
+                      00707 ; Reset all system variables to initial state
+Warning[203]: Found opcode in column 1. (NOP)
+0198   0000           00708 NOP
+                      00709 
+                      00710 ; Configure I/O ports
+Warning[205]: Found directive in column 1. (BANKSEL)
+0199   1683 1303      00711 BANKSEL TRISD
+Warning[203]: Found opcode in column 1. (MOVLW)
+019B   3000           00712 MOVLW B'00000000'
+Warning[203]: Found opcode in column 1. (MOVWF)
+Message[302]: Register in operand not in bank 0.  Ensure that bank bits are correct.
+019C   0088           00713 MOVWF TRISD 
+Warning[203]: Found opcode in column 1. (MOVLW)
+019D   3001           00714 MOVLW B'00000001'
+Warning[203]: Found opcode in column 1. (MOVWF)
+Message[302]: Register in operand not in bank 0.  Ensure that bank bits are correct.
+019E   0086           00715 MOVWF TRISB
+                      00716 
+                      00717 ; Configure USART pins
+Warning[205]: Found directive in column 1. (BANKSEL)
+019F   1683 1303      00718 BANKSEL TRISC
+Warning[203]: Found opcode in column 1. (BCF)
+Message[302]: Register in operand not in bank 0.  Ensure that bank bits are correct.
+01A1   1307           00719 BCF TRISC, 6
+Warning[203]: Found opcode in column 1. (BSF)
+Message[302]: Register in operand not in bank 0.  Ensure that bank bits are correct.
+01A2   1787           00720 BSF TRISC, 7
+                      00721 
+                      00722 ; Configure interrupt
+Warning[205]: Found directive in column 1. (BANKSEL)
+01A3   1683 1303      00723 BANKSEL OPTION_REG
+Warning[203]: Found opcode in column 1. (BCF)
+Message[302]: Register in operand not in bank 0.  Ensure that bank bits are correct.
+01A5   1301           00724 BCF OPTION_REG, INTEDG
+                      00725 
+                      00726 ; Configure Timer1 for 10ms interrupts
+Warning[205]: Found directive in column 1. (BANKSEL)
+01A6   1283 1303      00727 BANKSEL T1CON
+Warning[203]: Found opcode in column 1. (MOVLW)
+01A8   3031           00728 MOVLW B'00110001'
+Warning[203]: Found opcode in column 1. (MOVWF)
+01A9   0090           00729 MOVWF T1CON
+                      00730 
+                      00731 ; Set Timer1 initial value for 10ms overflow
+MPASM  5.43                       PROJECT.ASM   7-6-2025  21:11:22         PAGE 23
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+Warning[205]: Found directive in column 1. (BANKSEL)
+01AA   1283 1303      00732 BANKSEL TMR1H
+Warning[203]: Found opcode in column 1. (MOVLW)
+01AC   30EC           00733 MOVLW 0xEC
+Warning[203]: Found opcode in column 1. (MOVWF)
+01AD   008F           00734 MOVWF TMR1H
+Warning[203]: Found opcode in column 1. (MOVLW)
+01AE   3078           00735 MOVLW 0x78
+Warning[203]: Found opcode in column 1. (MOVWF)
+01AF   008E           00736 MOVWF TMR1L
+                      00737 
+                      00738 ; Configure Timer1 interrupt
+Warning[205]: Found directive in column 1. (BANKSEL)
+01B0   1683 1303      00739 BANKSEL PIE1
+Warning[203]: Found opcode in column 1. (BSF)
+Message[302]: Register in operand not in bank 0.  Ensure that bank bits are correct.
+01B2   140C           00740 BSF PIE1, TMR1IE
+Warning[205]: Found directive in column 1. (BANKSEL)
+01B3   1283 1303      00741 BANKSEL PIR1
+Warning[203]: Found opcode in column 1. (BCF)
+01B5   100C           00742 BCF PIR1, TMR1IF
+                      00743 
+                      00744 ; Initialize USART
+Warning[203]: Found opcode in column 1. (CALL)
+01B6   2???           00745 CALL init_master_usart
+                      00746 
+                      00747 ; Return to bank 0
+Warning[205]: Found directive in column 1. (BANKSEL)
+01B7   1283 1303      00748 BANKSEL PORTD
+Warning[203]: Found opcode in column 1. (CLRF)
+01B9   0188           00749 CLRF PORTD
+                      00750 
+                      00751 ; Initialize all variables
+Warning[203]: Found opcode in column 1. (clrf)
+01BA   01A4           00752 clrf digit_cursor_pos
+Warning[203]: Found opcode in column 1. (clrf)
+01BB   01D8           00753 clrf current_part
+Warning[203]: Found opcode in column 1. (clrf)
+01BC   01A5           00754 clrf digit_array1_0
+Warning[203]: Found opcode in column 1. (clrf)
+01BD   01A6           00755 clrf digit_array1_1
+Warning[203]: Found opcode in column 1. (clrf)
+01BE   01A7           00756 clrf digit_array1_2
+Warning[203]: Found opcode in column 1. (clrf)
+01BF   01A8           00757 clrf digit_array1_3
+Warning[203]: Found opcode in column 1. (clrf)
+01C0   01A9           00758 clrf digit_array1_4
+Warning[203]: Found opcode in column 1. (clrf)
+01C1   01AA           00759 clrf digit_array1_5
+Warning[203]: Found opcode in column 1. (clrf)
+01C2   01AB           00760 clrf digit_array1_6
+Warning[203]: Found opcode in column 1. (clrf)
+01C3   01AC           00761 clrf digit_array1_7
+MPASM  5.43                       PROJECT.ASM   7-6-2025  21:11:22         PAGE 24
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+Warning[203]: Found opcode in column 1. (clrf)
+01C4   01AD           00762 clrf digit_array1_8
+Warning[203]: Found opcode in column 1. (clrf)
+01C5   01AE           00763 clrf digit_array1_9
+Warning[203]: Found opcode in column 1. (clrf)
+01C6   01AF           00764 clrf digit_array1_10
+Warning[203]: Found opcode in column 1. (clrf)
+01C7   01B0           00765 clrf digit_array1_11
+Warning[203]: Found opcode in column 1. (clrf)
+01C8   01B1           00766 clrf digit_array2_0
+Warning[203]: Found opcode in column 1. (clrf)
+01C9   01B2           00767 clrf digit_array2_1
+Warning[203]: Found opcode in column 1. (clrf)
+01CA   01B3           00768 clrf digit_array2_2
+Warning[203]: Found opcode in column 1. (clrf)
+01CB   01B4           00769 clrf digit_array2_3
+Warning[203]: Found opcode in column 1. (clrf)
+01CC   01B5           00770 clrf digit_array2_4
+Warning[203]: Found opcode in column 1. (clrf)
+01CD   01B6           00771 clrf digit_array2_5
+Warning[203]: Found opcode in column 1. (clrf)
+01CE   01B7           00772 clrf digit_array2_6
+Warning[203]: Found opcode in column 1. (clrf)
+01CF   01B8           00773 clrf digit_array2_7
+Warning[203]: Found opcode in column 1. (clrf)
+01D0   01B9           00774 clrf digit_array2_8
+Warning[203]: Found opcode in column 1. (clrf)
+01D1   01BA           00775 clrf digit_array2_9
+Warning[203]: Found opcode in column 1. (clrf)
+01D2   01BB           00776 clrf digit_array2_10
+Warning[203]: Found opcode in column 1. (clrf)
+01D3   01BC           00777 clrf digit_array2_11
+Warning[203]: Found opcode in column 1. (clrf)
+01D4   01BD           00778 clrf result_array_0
+Warning[203]: Found opcode in column 1. (clrf)
+01D5   01BE           00779 clrf result_array_1
+Warning[203]: Found opcode in column 1. (clrf)
+01D6   01BF           00780 clrf result_array_2
+Warning[203]: Found opcode in column 1. (clrf)
+01D7   01C0           00781 clrf result_array_3
+Warning[203]: Found opcode in column 1. (clrf)
+01D8   01C1           00782 clrf result_array_4
+Warning[203]: Found opcode in column 1. (clrf)
+01D9   01C2           00783 clrf result_array_5
+Warning[203]: Found opcode in column 1. (clrf)
+01DA   01C3           00784 clrf result_array_6
+Warning[203]: Found opcode in column 1. (clrf)
+01DB   01C4           00785 clrf result_array_7
+Warning[203]: Found opcode in column 1. (clrf)
+01DC   01C5           00786 clrf result_array_8
+Warning[203]: Found opcode in column 1. (clrf)
+01DD   01C6           00787 clrf result_array_9
+Warning[203]: Found opcode in column 1. (clrf)
+MPASM  5.43                       PROJECT.ASM   7-6-2025  21:11:22         PAGE 25
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+01DE   01C7           00788 clrf result_array_10
+Warning[203]: Found opcode in column 1. (clrf)
+01DF   01C8           00789 clrf result_array_11
+Warning[203]: Found opcode in column 1. (clrf)
+01E0   01C9           00790 clrf resultDone
+Warning[203]: Found opcode in column 1. (clrf)
+01E1   01A3           00791 clrf current_digit_value
+Warning[203]: Found opcode in column 1. (clrf)
+01E2   01CA           00792 clrf timer1_enabled
+Warning[203]: Found opcode in column 1. (clrf)
+01E3   01CB           00793 clrf button_first_press
+Warning[203]: Found opcode in column 1. (clrf)
+01E4   01CC           00794 clrf screen1
+Warning[203]: Found opcode in column 1. (clrf)
+01E5   01CD           00795 clrf transmit_index
+Warning[203]: Found opcode in column 1. (clrf)
+01E6   01CE           00796 clrf number_transmitted
+Warning[203]: Found opcode in column 1. (clrf)
+01E7   01CF           00797 clrf number2_transmitted
+Warning[203]: Found opcode in column 1. (clrf)
+01E8   01D0           00798 clrf result_received
+Warning[203]: Found opcode in column 1. (clrf)
+01E9   01D1           00799 clrf calculation_done
+Warning[203]: Found opcode in column 1. (clrf)
+01EA   01D2           00800 clrf digit_index
+Warning[203]: Found opcode in column 1. (movlw)
+01EB   3028           00801 movlw TIMEOUT_2_SECONDS
+Warning[203]: Found opcode in column 1. (movwf)
+01EC   00D4           00802 movwf timeout_counter
+Warning[203]: Found opcode in column 1. (clrf)
+01ED   01D5           00803 clrf timeout_active
+Warning[203]: Found opcode in column 1. (clrf)
+01EE   01D6           00804 clrf click_timer
+Warning[203]: Found opcode in column 1. (clrf)
+01EF   01D7           00805 clrf click_count
+                      00806 ; Initialize new equals screen state
+Warning[203]: Found opcode in column 1. (clrf)
+01F0   01D9           00807 clrf showing_equals_screen
+                      00808 ; Initialize propagation variables
+Warning[203]: Found opcode in column 1. (clrf)
+01F1   01DA           00809 clrf propagation_value
+Warning[203]: Found opcode in column 1. (clrf)
+01F2   01DB           00810 clrf propagation_index
+                      00811 ; Initialize result display cycling
+Warning[203]: Found opcode in column 1. (clrf)
+01F3   01DC           00812 clrf result_display_state
+Warning[203]: Found opcode in column 1. (clrf)
+01F4   01DD           00813 clrf result_displayed_once
+                      00814 
+                      00815 ; Show first number input screen and restart the process
+Warning[203]: Found opcode in column 1. (call)
+01F5   2???           00816 call show_the_first_num
+Warning[203]: Found opcode in column 1. (call)
+MPASM  5.43                       PROJECT.ASM   7-6-2025  21:11:22         PAGE 26
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+01F6   2???           00817 call start_timeout
+Warning[203]: Found opcode in column 1. (return)
+01F7   0008           00818 return
+                      00819 
+01F8                  00820 handle_equals_screen_click:
+                      00821 ; User clicked on equals screen to start calculation
+                      00822 ; The calculation will happen automatically via USART, just clear equals screen flag
+Warning[203]: Found opcode in column 1. (bcf)
+01F8   1059           00823 bcf showing_equals_screen, 0
+Warning[203]: Found opcode in column 1. (return)
+01F9   0008           00824 return
+                      00825 
+01FA                  00826 cycle_result_display:
+                      00827 ; This function is now handled by handle_result_display_cycling
+                      00828 ; Keeping this label for compatibility but redirecting to the new function
+Warning[203]: Found opcode in column 1. (goto)
+01FA   2???           00829 goto handle_result_display_cycling
+                      00830 
+01FB                  00831 display_result_again:
+                      00832 ; Show result again
+Warning[203]: Found opcode in column 1. (call)
+01FB   2???           00833 call display_result_screen
+Warning[203]: Found opcode in column 1. (return)
+01FC   0008           00834 return
+                      00835 
+01FD                  00836 display_first_number_on_result:
+                      00837 ; Clear screen and show first number on first line
+Warning[203]: Found opcode in column 1. (movlw)
+01FD   3001           00838 movlw 0x01
+Warning[203]: Found opcode in column 1. (call)
+01FE   2???           00839 call lcd_cmd
+Warning[203]: Found opcode in column 1. (movlw)
+01FF   300C           00840 movlw 0x0C
+Warning[203]: Found opcode in column 1. (call)
+0200   2???           00841 call lcd_cmd
+                      00842 
+Warning[203]: Found opcode in column 1. (MOVLW)
+0201   3080           00843 MOVLW 0x80
+Warning[203]: Found opcode in column 1. (CALL)
+0202   2???           00844 CALL lcd_cmd
+Warning[203]: Found opcode in column 1. (MOVLW)
+0203   304E           00845 MOVLW 'N'
+Warning[203]: Found opcode in column 1. (CALL)
+0204   2???           00846 CALL lcd_data
+Warning[203]: Found opcode in column 1. (MOVLW)
+0205   3075           00847 MOVLW 'u'
+Warning[203]: Found opcode in column 1. (CALL)
+0206   2???           00848 CALL lcd_data
+Warning[203]: Found opcode in column 1. (MOVLW)
+0207   306D           00849 MOVLW 'm'
+Warning[203]: Found opcode in column 1. (CALL)
+0208   2???           00850 CALL lcd_data
+Warning[203]: Found opcode in column 1. (MOVLW)
+MPASM  5.43                       PROJECT.ASM   7-6-2025  21:11:22         PAGE 27
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+0209   3062           00851 MOVLW 'b'
+Warning[203]: Found opcode in column 1. (CALL)
+020A   2???           00852 CALL lcd_data
+Warning[203]: Found opcode in column 1. (MOVLW)
+020B   3065           00853 MOVLW 'e'
+Warning[203]: Found opcode in column 1. (CALL)
+020C   2???           00854 CALL lcd_data
+Warning[203]: Found opcode in column 1. (MOVLW)
+020D   3072           00855 MOVLW 'r'
+Warning[203]: Found opcode in column 1. (CALL)
+020E   2???           00856 CALL lcd_data
+Warning[203]: Found opcode in column 1. (MOVLW)
+020F   3031           00857 MOVLW '1'
+Warning[203]: Found opcode in column 1. (CALL)
+0210   2???           00858 CALL lcd_data
+Warning[203]: Found opcode in column 1. (MOVLW)
+0211   303A           00859 MOVLW ':'
+Warning[203]: Found opcode in column 1. (CALL)
+0212   2???           00860 CALL lcd_data
+                      00861 
+Warning[203]: Found opcode in column 1. (movlw)
+0213   30C0           00862 movlw 0xc0
+Warning[203]: Found opcode in column 1. (call)
+0214   2???           00863 call lcd_cmd
+                      00864 
+                      00865 
+                      00866 ; Display first number
+Warning[203]: Found opcode in column 1. (movf)
+0215   0825           00867 movf digit_array1_0, 0
+Warning[203]: Found opcode in column 1. (addlw)
+0216   3E30           00868 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+0217   2???           00869 call lcd_data
+Warning[203]: Found opcode in column 1. (movf)
+0218   0826           00870 movf digit_array1_1, 0
+Warning[203]: Found opcode in column 1. (addlw)
+0219   3E30           00871 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+021A   2???           00872 call lcd_data
+Warning[203]: Found opcode in column 1. (movf)
+021B   0827           00873 movf digit_array1_2, 0
+Warning[203]: Found opcode in column 1. (addlw)
+021C   3E30           00874 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+021D   2???           00875 call lcd_data
+Warning[203]: Found opcode in column 1. (movf)
+021E   0828           00876 movf digit_array1_3, 0
+Warning[203]: Found opcode in column 1. (addlw)
+021F   3E30           00877 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+0220   2???           00878 call lcd_data
+Warning[203]: Found opcode in column 1. (movf)
+0221   0829           00879 movf digit_array1_4, 0
+MPASM  5.43                       PROJECT.ASM   7-6-2025  21:11:22         PAGE 28
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+Warning[203]: Found opcode in column 1. (addlw)
+0222   3E30           00880 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+0223   2???           00881 call lcd_data
+Warning[203]: Found opcode in column 1. (movf)
+0224   082A           00882 movf digit_array1_5, 0
+Warning[203]: Found opcode in column 1. (addlw)
+0225   3E30           00883 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+0226   2???           00884 call lcd_data
+Warning[203]: Found opcode in column 1. (MOVLW)
+0227   302E           00885 MOVLW '.'
+Warning[203]: Found opcode in column 1. (CALL)
+0228   2???           00886 CALL lcd_data
+Warning[203]: Found opcode in column 1. (movf)
+0229   082B           00887 movf digit_array1_6, 0
+Warning[203]: Found opcode in column 1. (addlw)
+022A   3E30           00888 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+022B   2???           00889 call lcd_data
+Warning[203]: Found opcode in column 1. (movf)
+022C   082C           00890 movf digit_array1_7, 0
+Warning[203]: Found opcode in column 1. (addlw)
+022D   3E30           00891 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+022E   2???           00892 call lcd_data
+Warning[203]: Found opcode in column 1. (movf)
+022F   082D           00893 movf digit_array1_8, 0
+Warning[203]: Found opcode in column 1. (addlw)
+0230   3E30           00894 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+0231   2???           00895 call lcd_data
+Warning[203]: Found opcode in column 1. (movf)
+0232   082E           00896 movf digit_array1_9, 0
+Warning[203]: Found opcode in column 1. (addlw)
+0233   3E30           00897 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+0234   2???           00898 call lcd_data
+Warning[203]: Found opcode in column 1. (movf)
+0235   082F           00899 movf digit_array1_10, 0
+Warning[203]: Found opcode in column 1. (addlw)
+0236   3E30           00900 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+0237   2???           00901 call lcd_data
+Warning[203]: Found opcode in column 1. (movf)
+0238   0830           00902 movf digit_array1_11, 0
+Warning[203]: Found opcode in column 1. (addlw)
+0239   3E30           00903 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+023A   2???           00904 call lcd_data
+Warning[203]: Found opcode in column 1. (return)
+023B   0008           00905 return
+                      00906 
+MPASM  5.43                       PROJECT.ASM   7-6-2025  21:11:22         PAGE 29
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+023C                  00907 display_second_number_on_result:
+                      00908 ; Clear screen and show second number on first line
+Warning[203]: Found opcode in column 1. (movlw)
+023C   3001           00909 movlw 0x01
+Warning[203]: Found opcode in column 1. (call)
+023D   2???           00910 call lcd_cmd
+Warning[203]: Found opcode in column 1. (movlw)
+023E   300C           00911 movlw 0x0C
+Warning[203]: Found opcode in column 1. (call)
+023F   2???           00912 call lcd_cmd
+                      00913 
+Warning[203]: Found opcode in column 1. (MOVLW)
+0240   3080           00914 MOVLW 0x80
+Warning[203]: Found opcode in column 1. (CALL)
+0241   2???           00915 CALL lcd_cmd
+Warning[203]: Found opcode in column 1. (MOVLW)
+0242   304E           00916 MOVLW 'N'
+Warning[203]: Found opcode in column 1. (CALL)
+0243   2???           00917 CALL lcd_data
+Warning[203]: Found opcode in column 1. (MOVLW)
+0244   3075           00918 MOVLW 'u'
+Warning[203]: Found opcode in column 1. (CALL)
+0245   2???           00919 CALL lcd_data
+Warning[203]: Found opcode in column 1. (MOVLW)
+0246   306D           00920 MOVLW 'm'
+Warning[203]: Found opcode in column 1. (CALL)
+0247   2???           00921 CALL lcd_data
+Warning[203]: Found opcode in column 1. (MOVLW)
+0248   3062           00922 MOVLW 'b'
+Warning[203]: Found opcode in column 1. (CALL)
+0249   2???           00923 CALL lcd_data
+Warning[203]: Found opcode in column 1. (MOVLW)
+024A   3065           00924 MOVLW 'e'
+Warning[203]: Found opcode in column 1. (CALL)
+024B   2???           00925 CALL lcd_data
+Warning[203]: Found opcode in column 1. (MOVLW)
+024C   3072           00926 MOVLW 'r'
+Warning[203]: Found opcode in column 1. (CALL)
+024D   2???           00927 CALL lcd_data
+Warning[203]: Found opcode in column 1. (MOVLW)
+024E   3032           00928 MOVLW '2'
+Warning[203]: Found opcode in column 1. (CALL)
+024F   2???           00929 CALL lcd_data
+Warning[203]: Found opcode in column 1. (MOVLW)
+0250   303A           00930 MOVLW ':'
+Warning[203]: Found opcode in column 1. (CALL)
+0251   2???           00931 CALL lcd_data
+                      00932 
+Warning[203]: Found opcode in column 1. (movlw)
+0252   30C0           00933 movlw 0xc0
+Warning[203]: Found opcode in column 1. (call)
+0253   2???           00934 call lcd_cmd
+                      00935 
+MPASM  5.43                       PROJECT.ASM   7-6-2025  21:11:22         PAGE 30
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00936 ; Display second number
+Warning[203]: Found opcode in column 1. (movf)
+0254   0831           00937 movf digit_array2_0, 0
+Warning[203]: Found opcode in column 1. (addlw)
+0255   3E30           00938 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+0256   2???           00939 call lcd_data
+Warning[203]: Found opcode in column 1. (movf)
+0257   0832           00940 movf digit_array2_1, 0
+Warning[203]: Found opcode in column 1. (addlw)
+0258   3E30           00941 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+0259   2???           00942 call lcd_data
+Warning[203]: Found opcode in column 1. (movf)
+025A   0833           00943 movf digit_array2_2, 0
+Warning[203]: Found opcode in column 1. (addlw)
+025B   3E30           00944 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+025C   2???           00945 call lcd_data
+Warning[203]: Found opcode in column 1. (movf)
+025D   0834           00946 movf digit_array2_3, 0
+Warning[203]: Found opcode in column 1. (addlw)
+025E   3E30           00947 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+025F   2???           00948 call lcd_data
+Warning[203]: Found opcode in column 1. (movf)
+0260   0835           00949 movf digit_array2_4, 0
+Warning[203]: Found opcode in column 1. (addlw)
+0261   3E30           00950 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+0262   2???           00951 call lcd_data
+Warning[203]: Found opcode in column 1. (movf)
+0263   0836           00952 movf digit_array2_5, 0
+Warning[203]: Found opcode in column 1. (addlw)
+0264   3E30           00953 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+0265   2???           00954 call lcd_data
+Warning[203]: Found opcode in column 1. (MOVLW)
+0266   302E           00955 MOVLW '.'
+Warning[203]: Found opcode in column 1. (CALL)
+0267   2???           00956 CALL lcd_data
+Warning[203]: Found opcode in column 1. (movf)
+0268   0837           00957 movf digit_array2_6, 0
+Warning[203]: Found opcode in column 1. (addlw)
+0269   3E30           00958 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+026A   2???           00959 call lcd_data
+Warning[203]: Found opcode in column 1. (movf)
+026B   0838           00960 movf digit_array2_7, 0
+Warning[203]: Found opcode in column 1. (addlw)
+026C   3E30           00961 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+026D   2???           00962 call lcd_data
+MPASM  5.43                       PROJECT.ASM   7-6-2025  21:11:22         PAGE 31
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+Warning[203]: Found opcode in column 1. (movf)
+026E   0839           00963 movf digit_array2_8, 0
+Warning[203]: Found opcode in column 1. (addlw)
+026F   3E30           00964 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+0270   2???           00965 call lcd_data
+Warning[203]: Found opcode in column 1. (movf)
+0271   083A           00966 movf digit_array2_9, 0
+Warning[203]: Found opcode in column 1. (addlw)
+0272   3E30           00967 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+0273   2???           00968 call lcd_data
+Warning[203]: Found opcode in column 1. (movf)
+0274   083B           00969 movf digit_array2_10, 0
+Warning[203]: Found opcode in column 1. (addlw)
+0275   3E30           00970 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+0276   2???           00971 call lcd_data
+Warning[203]: Found opcode in column 1. (movf)
+0277   083C           00972 movf digit_array2_11, 0
+Warning[203]: Found opcode in column 1. (addlw)
+0278   3E30           00973 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+0279   2???           00974 call lcd_data
+Warning[203]: Found opcode in column 1. (return)
+027A   0008           00975 return
+                      00976 
+027B                  00977 handle_single_click:
+                      00978 ; Just increment the current digit - no cursor movement
+Warning[203]: Found opcode in column 1. (movlw)
+027B   3001           00979 movlw .1
+Warning[203]: Found opcode in column 1. (subwf)
+027C   024C           00980 subwf screen1, 0
+Warning[203]: Found opcode in column 1. (btfss)
+027D   1D03           00981 btfss STATUS, Z
+Warning[203]: Found opcode in column 1. (goto)
+027E   2???           00982 goto single_click_screen1
+Warning[203]: Found opcode in column 1. (call)
+027F   2???           00983 call increment_current_digit_2
+Warning[203]: Found opcode in column 1. (call)
+0280   2???           00984 call update_single_digit_display_2
+Warning[203]: Found opcode in column 1. (return)
+0281   0008           00985 return
+                      00986 
+0282                  00987 single_click_screen1:
+Warning[203]: Found opcode in column 1. (call)
+0282   2???           00988 call increment_current_digit_1
+Warning[203]: Found opcode in column 1. (call)
+0283   2???           00989 call update_single_digit_display_1
+Warning[203]: Found opcode in column 1. (return)
+0284   0008           00990 return
+                      00991 
+0285                  00992 handle_double_click:
+MPASM  5.43                       PROJECT.ASM   7-6-2025  21:11:22         PAGE 32
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      00993 ; Reset click detection immediately
+Warning[203]: Found opcode in column 1. (clrf)
+0285   01D7           00994 clrf click_count
+Warning[203]: Found opcode in column 1. (clrf)
+0286   01D6           00995 clrf click_timer
+                      00996 
+                      00997 ; Stop main timeout during transition
+Warning[203]: Found opcode in column 1. (call)
+0287   2???           00998 call stop_main_timeout
+                      00999 
+                      01000 ; NEW FEATURE: Do propagation before any double-click transition
+Warning[203]: Found opcode in column 1. (call)
+0288   2???           01001 call do_propagation_for_double_click
+                      01002 
+                      01003 ; Handle double-click based on current state
+Warning[203]: Found opcode in column 1. (movlw)
+0289   3001           01004 movlw .1
+Warning[203]: Found opcode in column 1. (subwf)
+028A   024C           01005 subwf screen1, 0
+Warning[203]: Found opcode in column 1. (btfss)
+028B   1D03           01006 btfss STATUS, Z
+Warning[203]: Found opcode in column 1. (goto)
+028C   2???           01007 goto double_click_screen1
+                      01008 
+                      01009 ; Screen 2 (Number 2)
+Warning[203]: Found opcode in column 1. (btfsc)
+028D   1858           01010 btfsc current_part, 0
+Warning[203]: Found opcode in column 1. (goto)
+028E   2???           01011 goto move_to_equals_screen  ; Show equals screen
+Warning[203]: Found opcode in column 1. (goto)
+028F   2???           01012 goto move_to_fractional_part2
+                      01013 
+0290                  01014 double_click_screen1:
+                      01015 ; Screen 1 (Number 1)
+Warning[203]: Found opcode in column 1. (btfsc)
+0290   1858           01016 btfsc current_part, 0
+Warning[203]: Found opcode in column 1. (goto)
+0291   2???           01017 goto move_to_number2
+Warning[203]: Found opcode in column 1. (goto)
+0292   2???           01018 goto move_to_fractional_part1
+                      01019 
+0293                  01020 move_to_fractional_part1:
+                      01021 ; Switch to fractional part (propagation already done)
+Warning[203]: Found opcode in column 1. (bsf)
+0293   1458           01022 bsf current_part, 0
+Warning[203]: Found opcode in column 1. (movlw)
+0294   3007           01023 movlw .7
+Warning[203]: Found opcode in column 1. (movwf)
+0295   00A4           01024 movwf digit_cursor_pos
+Warning[203]: Found opcode in column 1. (call)
+0296   2???           01025 call show_the_first_num_fractional
+Warning[203]: Found opcode in column 1. (call)
+0297   2???           01026 call restart_main_timeout
+MPASM  5.43                       PROJECT.ASM   7-6-2025  21:11:22         PAGE 33
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+Warning[203]: Found opcode in column 1. (return)
+0298   0008           01027 return
+                      01028 
+0299                  01029 move_to_number2:
+                      01030 ; Move to second number (propagation already done)
+                      01031 ; First transmit the first number
+Warning[203]: Found opcode in column 1. (movf)
+0299   084E           01032 movf number_transmitted, 0
+Warning[203]: Found opcode in column 1. (sublw)
+029A   3C00           01033 sublw .0
+Warning[203]: Found opcode in column 1. (btfss)
+029B   1D03           01034 btfss STATUS, Z
+Warning[203]: Found opcode in column 1. (goto)
+029C   2???           01035 goto skip_transmission
+Warning[203]: Found opcode in column 1. (call)
+029D   2???           01036 call transmit_first_number_to_slave
+Warning[203]: Found opcode in column 1. (movlw)
+029E   3001           01037 movlw .1
+Warning[203]: Found opcode in column 1. (movwf)
+029F   00CE           01038 movwf number_transmitted
+                      01039 
+02A0                  01040 skip_transmission:
+                      01041 ; Reset states for second number input - EXACTLY like first number
+Warning[203]: Found opcode in column 1. (clrf)
+02A0   01D8           01042 clrf current_part      ; Reset to integer part
+Warning[203]: Found opcode in column 1. (clrf)
+02A1   01A4           01043 clrf digit_cursor_pos  ; Reset to first digit position
+                      01044 ; Clear click states
+Warning[203]: Found opcode in column 1. (clrf)
+02A2   01D7           01045 clrf click_count
+Warning[203]: Found opcode in column 1. (clrf)
+02A3   01D6           01046 clrf click_timer
+                      01047 ; Show second number screen
+Warning[203]: Found opcode in column 1. (call)
+02A4   2???           01048 call show_the_second_num
+                      01049 ; Start fresh timeout for second number
+Warning[203]: Found opcode in column 1. (call)
+02A5   2???           01050 call restart_main_timeout
+Warning[203]: Found opcode in column 1. (return)
+02A6   0008           01051 return
+                      01052 
+02A7                  01053 move_to_fractional_part2:
+                      01054 ; Switch to fractional part (propagation already done)
+Warning[203]: Found opcode in column 1. (bsf)
+02A7   1458           01055 bsf current_part, 0
+Warning[203]: Found opcode in column 1. (movlw)
+02A8   3007           01056 movlw .7
+Warning[203]: Found opcode in column 1. (movwf)
+02A9   00A4           01057 movwf digit_cursor_pos
+Warning[203]: Found opcode in column 1. (call)
+02AA   2???           01058 call show_the_second_num_fractional
+Warning[203]: Found opcode in column 1. (call)
+02AB   2???           01059 call restart_main_timeout
+MPASM  5.43                       PROJECT.ASM   7-6-2025  21:11:22         PAGE 34
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+Warning[203]: Found opcode in column 1. (return)
+02AC   0008           01060 return
+                      01061 
+02AD                  01062 move_to_equals_screen:
+                      01063 ; Show equals screen (propagation already done)
+                      01064 ; First transmit second number if not already done
+Warning[203]: Found opcode in column 1. (movf)
+02AD   084F           01065 movf number2_transmitted, 0
+Warning[203]: Found opcode in column 1. (sublw)
+02AE   3C00           01066 sublw .0
+Warning[203]: Found opcode in column 1. (btfss)
+02AF   1D03           01067 btfss STATUS, Z
+Warning[203]: Found opcode in column 1. (goto)
+02B0   2???           01068 goto skip_second_transmission
+Warning[203]: Found opcode in column 1. (call)
+02B1   2???           01069 call transmit_second_number_to_slave
+Warning[203]: Found opcode in column 1. (movlw)
+02B2   3001           01070 movlw .1
+Warning[203]: Found opcode in column 1. (movwf)
+02B3   00CF           01071 movwf number2_transmitted
+                      01072 
+02B4                  01073 skip_second_transmission:
+                      01074 ; Show equals screen
+Warning[203]: Found opcode in column 1. (call)
+02B4   2???           01075 call show_equals_screen
+                      01076 ; Set equals screen flag
+Warning[203]: Found opcode in column 1. (bsf)
+02B5   1459           01077 bsf showing_equals_screen, 0
+                      01078 ; Stop timeout since we're waiting for user action
+Warning[203]: Found opcode in column 1. (call)
+02B6   2???           01079 call stop_main_timeout
+Warning[203]: Found opcode in column 1. (return)
+02B7   0008           01080 return
+                      01081 
+02B8                  01082 start_calculation_process:
+                      01083 ; ; Called when user clicks while on equals screen
+                      01084 ; ; Clear equals screen flag
+                      01085 ; bcf showing_equals_screen, 0
+                      01086 ; ; Start calculation
+                      01087 ; call receive_result_from_slave
+                      01088 ; bsf calculation_done, 0
+                      01089 ; call stop_main_timeout
+Warning[203]: Found opcode in column 1. (return)
+02B8   0008           01090 return
+                      01091 
+                      01092 ;----------------------------------------TIMEOUT FUNCTIONS----------------------------------------------
+                            ---------------
+02B9                  01093 start_timeout:
+Warning[203]: Found opcode in column 1. (movlw)
+02B9   3028           01094 movlw TIMEOUT_2_SECONDS
+Warning[203]: Found opcode in column 1. (movwf)
+02BA   00D4           01095 movwf timeout_counter
+Warning[203]: Found opcode in column 1. (bsf)
+MPASM  5.43                       PROJECT.ASM   7-6-2025  21:11:22         PAGE 35
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+02BB   1455           01096 bsf timeout_active, 0
+Warning[203]: Found opcode in column 1. (return)
+02BC   0008           01097 return
+                      01098 
+02BD                  01099 restart_main_timeout:
+Warning[203]: Found opcode in column 1. (movlw)
+02BD   3028           01100 movlw TIMEOUT_2_SECONDS
+Warning[203]: Found opcode in column 1. (movwf)
+02BE   00D4           01101 movwf timeout_counter
+Warning[203]: Found opcode in column 1. (bsf)
+02BF   1455           01102 bsf timeout_active, 0
+Warning[203]: Found opcode in column 1. (return)
+02C0   0008           01103 return
+                      01104 
+02C1                  01105 stop_main_timeout:
+Warning[203]: Found opcode in column 1. (bcf)
+02C1   1055           01106 bcf timeout_active, 0
+Warning[203]: Found opcode in column 1. (return)
+02C2   0008           01107 return
+                      01108 
+02C3                  01109 display_result_received:
+02C3   3001           01110     MOVLW   0x01
+02C4   2???           01111     CALL    lcd_cmd
+02C5   3080           01112     MOVLW   0x80
+02C6   2???           01113     CALL    lcd_cmd
+02C7   30C0           01114     MOVLW 0xc0
+Warning[203]: Found opcode in column 1. (CALL)
+02C8   2???           01115 CALL lcd_cmd
+                      01116 
+Warning[203]: Found opcode in column 1. (movf)
+02C9   083D           01117 movf result_array_0, 0
+Warning[203]: Found opcode in column 1. (addlw)
+02CA   3E30           01118 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+02CB   2???           01119 call lcd_data
+Warning[203]: Found opcode in column 1. (movf)
+02CC   083E           01120 movf result_array_1, 0
+Warning[203]: Found opcode in column 1. (addlw)
+02CD   3E30           01121 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+02CE   2???           01122 call lcd_data
+Warning[203]: Found opcode in column 1. (movf)
+02CF   083F           01123 movf result_array_2, 0
+Warning[203]: Found opcode in column 1. (addlw)
+02D0   3E30           01124 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+02D1   2???           01125 call lcd_data
+Warning[203]: Found opcode in column 1. (movf)
+02D2   0840           01126 movf result_array_3, 0
+Warning[203]: Found opcode in column 1. (addlw)
+02D3   3E30           01127 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+02D4   2???           01128 call lcd_data
+MPASM  5.43                       PROJECT.ASM   7-6-2025  21:11:22         PAGE 36
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+Warning[203]: Found opcode in column 1. (movf)
+02D5   0841           01129 movf result_array_4, 0
+Warning[203]: Found opcode in column 1. (addlw)
+02D6   3E30           01130 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+02D7   2???           01131 call lcd_data
+Warning[203]: Found opcode in column 1. (movf)
+02D8   0842           01132 movf result_array_5, 0
+Warning[203]: Found opcode in column 1. (addlw)
+02D9   3E30           01133 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+02DA   2???           01134 call lcd_data
+Warning[203]: Found opcode in column 1. (MOVLW)
+02DB   302E           01135 MOVLW '.'
+Warning[203]: Found opcode in column 1. (CALL)
+02DC   2???           01136 CALL lcd_data
+Warning[203]: Found opcode in column 1. (movf)
+02DD   0843           01137 movf result_array_6, 0
+Warning[203]: Found opcode in column 1. (addlw)
+02DE   3E30           01138 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+02DF   2???           01139 call lcd_data
+Warning[203]: Found opcode in column 1. (movf)
+02E0   0844           01140 movf result_array_7, 0
+Warning[203]: Found opcode in column 1. (addlw)
+02E1   3E30           01141 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+02E2   2???           01142 call lcd_data
+Warning[203]: Found opcode in column 1. (movf)
+02E3   0845           01143 movf result_array_8, 0
+Warning[203]: Found opcode in column 1. (addlw)
+02E4   3E30           01144 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+02E5   2???           01145 call lcd_data
+Warning[203]: Found opcode in column 1. (movf)
+02E6   0846           01146 movf result_array_9, 0
+Warning[203]: Found opcode in column 1. (addlw)
+02E7   3E30           01147 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+02E8   2???           01148 call lcd_data
+Warning[203]: Found opcode in column 1. (movf)
+02E9   0847           01149 movf result_array_10, 0
+Warning[203]: Found opcode in column 1. (addlw)
+02EA   3E30           01150 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+02EB   2???           01151 call lcd_data
+Warning[203]: Found opcode in column 1. (movf)
+02EC   0848           01152 movf result_array_11, 0
+Warning[203]: Found opcode in column 1. (addlw)
+02ED   3E30           01153 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+02EE   2???           01154 call lcd_data
+Warning[203]: Found opcode in column 1. (RETURN)
+MPASM  5.43                       PROJECT.ASM   7-6-2025  21:11:22         PAGE 37
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+02EF   0008           01155 RETURN
+                      01156 
+                      01157 
+                      01158 
+                      01159 ;----------------------------------------LCD FUNCTIONS--------------------------------------------------
+                            -----------
+02F0                  01160 lcd_data:
+Warning[203]: Found opcode in column 1. (BSF)
+02F0   14F4           01161 BSF Select,RS
+Warning[203]: Found opcode in column 1. (CALL)
+02F1   2???           01162 CALL send
+Warning[203]: Found opcode in column 1. (RETURN)
+02F2   0008           01163 RETURN
+                      01164 
+02F3                  01165 lcd_cmd:
+Warning[203]: Found opcode in column 1. (BCF)
+02F3   10F4           01166 BCF Select,RS
+Warning[203]: Found opcode in column 1. (CALL)
+02F4   2???           01167 CALL send
+Warning[203]: Found opcode in column 1. (RETURN)
+02F5   0008           01168 RETURN
+                      01169 
+02F6                  01170 print_welcome:
+Warning[203]: Found opcode in column 1. (MOVLW)
+02F6   3080           01171 MOVLW 0x80
+Warning[203]: Found opcode in column 1. (CALL)
+02F7   2???           01172 CALL lcd_cmd
+Warning[203]: Found opcode in column 1. (MOVLW)
+02F8   3057           01173 MOVLW 'W'
+Warning[203]: Found opcode in column 1. (CALL)
+02F9   2???           01174 CALL lcd_data
+Warning[203]: Found opcode in column 1. (MOVLW)
+02FA   3065           01175 MOVLW 'e'
+Warning[203]: Found opcode in column 1. (CALL)
+02FB   2???           01176 CALL lcd_data
+Warning[203]: Found opcode in column 1. (MOVLW)
+02FC   306C           01177 MOVLW 'l'
+Warning[203]: Found opcode in column 1. (CALL)
+02FD   2???           01178 CALL lcd_data
+Warning[203]: Found opcode in column 1. (MOVLW)
+02FE   3063           01179 MOVLW 'c'
+Warning[203]: Found opcode in column 1. (CALL)
+02FF   2???           01180 CALL lcd_data
+Warning[203]: Found opcode in column 1. (MOVLW)
+0300   306F           01181 MOVLW 'o'
+Warning[203]: Found opcode in column 1. (CALL)
+0301   2???           01182 CALL lcd_data
+Warning[203]: Found opcode in column 1. (MOVLW)
+0302   306D           01183 MOVLW 'm'
+Warning[203]: Found opcode in column 1. (CALL)
+0303   2???           01184 CALL lcd_data
+Warning[203]: Found opcode in column 1. (MOVLW)
+0304   3065           01185 MOVLW 'e'
+MPASM  5.43                       PROJECT.ASM   7-6-2025  21:11:22         PAGE 38
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+Warning[203]: Found opcode in column 1. (CALL)
+0305   2???           01186 CALL lcd_data
+Warning[203]: Found opcode in column 1. (MOVLW)
+0306   3020           01187 MOVLW ' '
+Warning[203]: Found opcode in column 1. (CALL)
+0307   2???           01188 CALL lcd_data
+Warning[203]: Found opcode in column 1. (MOVLW)
+0308   3074           01189 MOVLW 't'
+Warning[203]: Found opcode in column 1. (CALL)
+0309   2???           01190 CALL lcd_data
+Warning[203]: Found opcode in column 1. (MOVLW)
+030A   306F           01191 MOVLW 'o'
+Warning[203]: Found opcode in column 1. (CALL)
+030B   2???           01192 CALL lcd_data
+                      01193 
+Warning[203]: Found opcode in column 1. (MOVLW)
+030C   30C0           01194 MOVLW 0xc0
+Warning[203]: Found opcode in column 1. (CALL)
+030D   2???           01195 CALL lcd_cmd
+Warning[203]: Found opcode in column 1. (MOVLW)
+030E   3044           01196 MOVLW 'D'
+Warning[203]: Found opcode in column 1. (CALL)
+030F   2???           01197 CALL lcd_data
+Warning[203]: Found opcode in column 1. (MOVLW)
+0310   3069           01198 MOVLW 'i'
+Warning[203]: Found opcode in column 1. (CALL)
+0311   2???           01199 CALL lcd_data
+Warning[203]: Found opcode in column 1. (MOVLW)
+0312   3076           01200 MOVLW 'v'
+Warning[203]: Found opcode in column 1. (CALL)
+0313   2???           01201 CALL lcd_data
+Warning[203]: Found opcode in column 1. (MOVLW)
+0314   3069           01202 MOVLW 'i'
+Warning[203]: Found opcode in column 1. (CALL)
+0315   2???           01203 CALL lcd_data
+Warning[203]: Found opcode in column 1. (MOVLW)
+0316   3073           01204 MOVLW 's'
+Warning[203]: Found opcode in column 1. (CALL)
+0317   2???           01205 CALL lcd_data
+Warning[203]: Found opcode in column 1. (MOVLW)
+0318   3069           01206 MOVLW 'i'
+Warning[203]: Found opcode in column 1. (CALL)
+0319   2???           01207 CALL lcd_data
+Warning[203]: Found opcode in column 1. (MOVLW)
+031A   306F           01208 MOVLW 'o'
+Warning[203]: Found opcode in column 1. (CALL)
+031B   2???           01209 CALL lcd_data
+Warning[203]: Found opcode in column 1. (MOVLW)
+031C   306E           01210 MOVLW 'n'
+Warning[203]: Found opcode in column 1. (CALL)
+031D   2???           01211 CALL lcd_data
+Warning[203]: Found opcode in column 1. (RETURN)
+031E   0008           01212 RETURN
+MPASM  5.43                       PROJECT.ASM   7-6-2025  21:11:22         PAGE 39
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      01213 
+031F                  01214 show_the_first_num:
+Warning[203]: Found opcode in column 1. (clrf)
+031F   01D8           01215 clrf current_part
+Warning[203]: Found opcode in column 1. (clrf)
+0320   01A4           01216 clrf digit_cursor_pos
+                      01217 
+Warning[203]: Found opcode in column 1. (movlw)
+0321   3001           01218 movlw 0x01
+Warning[203]: Found opcode in column 1. (call)
+0322   2???           01219 call lcd_cmd
+Warning[203]: Found opcode in column 1. (movlw)
+0323   300F           01220 movlw 0x0F
+Warning[203]: Found opcode in column 1. (call)
+0324   2???           01221 call lcd_cmd
+                      01222 
+Warning[203]: Found opcode in column 1. (MOVLW)
+0325   3080           01223 MOVLW 0x80
+Warning[203]: Found opcode in column 1. (CALL)
+0326   2???           01224 CALL lcd_cmd
+Warning[203]: Found opcode in column 1. (MOVLW)
+0327   304E           01225 MOVLW 'N'
+Warning[203]: Found opcode in column 1. (CALL)
+0328   2???           01226 CALL lcd_data
+Warning[203]: Found opcode in column 1. (MOVLW)
+0329   3075           01227 MOVLW 'u'
+Warning[203]: Found opcode in column 1. (CALL)
+032A   2???           01228 CALL lcd_data
+Warning[203]: Found opcode in column 1. (MOVLW)
+032B   306D           01229 MOVLW 'm'
+Warning[203]: Found opcode in column 1. (CALL)
+032C   2???           01230 CALL lcd_data
+Warning[203]: Found opcode in column 1. (MOVLW)
+032D   3062           01231 MOVLW 'b'
+Warning[203]: Found opcode in column 1. (CALL)
+032E   2???           01232 CALL lcd_data
+Warning[203]: Found opcode in column 1. (MOVLW)
+032F   3065           01233 MOVLW 'e'
+Warning[203]: Found opcode in column 1. (CALL)
+0330   2???           01234 CALL lcd_data
+Warning[203]: Found opcode in column 1. (MOVLW)
+0331   3072           01235 MOVLW 'r'
+Warning[203]: Found opcode in column 1. (CALL)
+0332   2???           01236 CALL lcd_data
+Warning[203]: Found opcode in column 1. (MOVLW)
+0333   3020           01237 MOVLW ' '
+Warning[203]: Found opcode in column 1. (CALL)
+0334   2???           01238 CALL lcd_data
+Warning[203]: Found opcode in column 1. (MOVLW)
+0335   3031           01239 MOVLW '1'
+Warning[203]: Found opcode in column 1. (CALL)
+0336   2???           01240 CALL lcd_data
+                      01241 
+MPASM  5.43                       PROJECT.ASM   7-6-2025  21:11:22         PAGE 40
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+Warning[203]: Found opcode in column 1. (MOVLW)
+0337   30C0           01242 MOVLW 0xc0
+Warning[203]: Found opcode in column 1. (CALL)
+0338   2???           01243 CALL lcd_cmd
+                      01244 
+Warning[203]: Found opcode in column 1. (CALL)
+0339   2???           01245 CALL display_all_digits_1
+Warning[203]: Found opcode in column 1. (CALL)
+033A   2???           01246 CALL position_cursor
+Warning[203]: Found opcode in column 1. (RETURN)
+033B   0008           01247 RETURN
+                      01248 
+033C                  01249 show_the_first_num_fractional:
+Warning[203]: Found opcode in column 1. (movlw)
+033C   3001           01250 movlw 0x01
+Warning[203]: Found opcode in column 1. (call)
+033D   2???           01251 call lcd_cmd
+Warning[203]: Found opcode in column 1. (movlw)
+033E   300F           01252 movlw 0x0F
+Warning[203]: Found opcode in column 1. (call)
+033F   2???           01253 call lcd_cmd
+                      01254 
+Warning[203]: Found opcode in column 1. (MOVLW)
+0340   3080           01255 MOVLW 0x80
+Warning[203]: Found opcode in column 1. (CALL)
+0341   2???           01256 CALL lcd_cmd
+Warning[203]: Found opcode in column 1. (MOVLW)
+0342   304E           01257 MOVLW 'N'
+Warning[203]: Found opcode in column 1. (CALL)
+0343   2???           01258 CALL lcd_data
+Warning[203]: Found opcode in column 1. (MOVLW)
+0344   3075           01259 MOVLW 'u'
+Warning[203]: Found opcode in column 1. (CALL)
+0345   2???           01260 CALL lcd_data
+Warning[203]: Found opcode in column 1. (MOVLW)
+0346   306D           01261 MOVLW 'm'
+Warning[203]: Found opcode in column 1. (CALL)
+0347   2???           01262 CALL lcd_data
+Warning[203]: Found opcode in column 1. (MOVLW)
+0348   3062           01263 MOVLW 'b'
+Warning[203]: Found opcode in column 1. (CALL)
+0349   2???           01264 CALL lcd_data
+Warning[203]: Found opcode in column 1. (MOVLW)
+034A   3065           01265 MOVLW 'e'
+Warning[203]: Found opcode in column 1. (CALL)
+034B   2???           01266 CALL lcd_data
+Warning[203]: Found opcode in column 1. (MOVLW)
+034C   3072           01267 MOVLW 'r'
+Warning[203]: Found opcode in column 1. (CALL)
+034D   2???           01268 CALL lcd_data
+Warning[203]: Found opcode in column 1. (MOVLW)
+034E   3020           01269 MOVLW ' '
+Warning[203]: Found opcode in column 1. (CALL)
+MPASM  5.43                       PROJECT.ASM   7-6-2025  21:11:22         PAGE 41
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+034F   2???           01270 CALL lcd_data
+Warning[203]: Found opcode in column 1. (MOVLW)
+0350   3031           01271 MOVLW '1'
+Warning[203]: Found opcode in column 1. (CALL)
+0351   2???           01272 CALL lcd_data
+                      01273 
+                      01274 
+Warning[203]: Found opcode in column 1. (MOVLW)
+0352   30C0           01275 MOVLW 0xc0
+Warning[203]: Found opcode in column 1. (CALL)
+0353   2???           01276 CALL lcd_cmd
+                      01277 
+Warning[203]: Found opcode in column 1. (CALL)
+0354   2???           01278 CALL display_all_digits_1
+Warning[203]: Found opcode in column 1. (CALL)
+0355   2???           01279 CALL position_cursor
+Warning[203]: Found opcode in column 1. (RETURN)
+0356   0008           01280 RETURN
+                      01281 
+0357                  01282 show_the_second_num:
+                      01283 ; Don't reset current_part and digit_cursor_pos here
+                      01284 ; They should already be set by the calling function
+                      01285 
+Warning[203]: Found opcode in column 1. (movlw)
+0357   3001           01286 movlw 0x01
+Warning[203]: Found opcode in column 1. (movwf)
+0358   00CC           01287 movwf screen1         ; Set to screen 2
+Warning[203]: Found opcode in column 1. (call)
+0359   2???           01288 call lcd_cmd
+Warning[203]: Found opcode in column 1. (movlw)
+035A   300F           01289 movlw 0x0F
+Warning[203]: Found opcode in column 1. (call)
+035B   2???           01290 call lcd_cmd
+                      01291 
+Warning[203]: Found opcode in column 1. (MOVLW)
+035C   3080           01292 MOVLW 0x80
+Warning[203]: Found opcode in column 1. (CALL)
+035D   2???           01293 CALL lcd_cmd
+Warning[203]: Found opcode in column 1. (MOVLW)
+035E   304E           01294 MOVLW 'N'
+Warning[203]: Found opcode in column 1. (CALL)
+035F   2???           01295 CALL lcd_data
+Warning[203]: Found opcode in column 1. (MOVLW)
+0360   3075           01296 MOVLW 'u'
+Warning[203]: Found opcode in column 1. (CALL)
+0361   2???           01297 CALL lcd_data
+Warning[203]: Found opcode in column 1. (MOVLW)
+0362   306D           01298 MOVLW 'm'
+Warning[203]: Found opcode in column 1. (CALL)
+0363   2???           01299 CALL lcd_data
+Warning[203]: Found opcode in column 1. (MOVLW)
+0364   3062           01300 MOVLW 'b'
+Warning[203]: Found opcode in column 1. (CALL)
+MPASM  5.43                       PROJECT.ASM   7-6-2025  21:11:22         PAGE 42
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+0365   2???           01301 CALL lcd_data
+Warning[203]: Found opcode in column 1. (MOVLW)
+0366   3065           01302 MOVLW 'e'
+Warning[203]: Found opcode in column 1. (CALL)
+0367   2???           01303 CALL lcd_data
+Warning[203]: Found opcode in column 1. (MOVLW)
+0368   3072           01304 MOVLW 'r'
+Warning[203]: Found opcode in column 1. (CALL)
+0369   2???           01305 CALL lcd_data
+Warning[203]: Found opcode in column 1. (MOVLW)
+036A   3020           01306 MOVLW ' '
+Warning[203]: Found opcode in column 1. (CALL)
+036B   2???           01307 CALL lcd_data
+Warning[203]: Found opcode in column 1. (MOVLW)
+036C   3032           01308 MOVLW '2'
+Warning[203]: Found opcode in column 1. (CALL)
+036D   2???           01309 CALL lcd_data
+Warning[203]: Found opcode in column 1. (CALL)
+036E   2???           01310 CALL delay_500ms
+Warning[203]: Found opcode in column 1. (CALL)
+036F   2???           01311 CALL delay_500ms
+                      01312 
+Warning[203]: Found opcode in column 1. (movlw)
+0370   3001           01313 movlw 0x01
+Warning[203]: Found opcode in column 1. (movwf)
+0371   00CC           01314 movwf screen1         ; Set to screen 2
+Warning[203]: Found opcode in column 1. (call)
+0372   2???           01315 call lcd_cmd
+Warning[203]: Found opcode in column 1. (movlw)
+0373   300F           01316 movlw 0x0F
+Warning[203]: Found opcode in column 1. (call)
+0374   2???           01317 call lcd_cmd
+                      01318 
+Warning[203]: Found opcode in column 1. (MOVLW)
+0375   30C0           01319 MOVLW 0xc0
+Warning[203]: Found opcode in column 1. (CALL)
+0376   2???           01320 CALL lcd_cmd
+                      01321 
+Warning[203]: Found opcode in column 1. (CALL)
+0377   2???           01322 CALL display_all_digits_2
+Warning[203]: Found opcode in column 1. (CALL)
+0378   2???           01323 CALL position_cursor
+Warning[203]: Found opcode in column 1. (RETURN)
+0379   0008           01324 RETURN
+                      01325 
+037A                  01326 show_the_second_num_fractional:
+Warning[203]: Found opcode in column 1. (movlw)
+037A   3001           01327 movlw 0x01
+Warning[203]: Found opcode in column 1. (call)
+037B   2???           01328 call lcd_cmd
+Warning[203]: Found opcode in column 1. (movlw)
+037C   300F           01329 movlw 0x0F
+Warning[203]: Found opcode in column 1. (call)
+MPASM  5.43                       PROJECT.ASM   7-6-2025  21:11:22         PAGE 43
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+037D   2???           01330 call lcd_cmd
+                      01331 
+Warning[203]: Found opcode in column 1. (MOVLW)
+037E   30C0           01332 MOVLW 0xc0
+Warning[203]: Found opcode in column 1. (CALL)
+037F   2???           01333 CALL lcd_cmd
+                      01334 
+Warning[203]: Found opcode in column 1. (CALL)
+0380   2???           01335 CALL display_all_digits_2
+Warning[203]: Found opcode in column 1. (CALL)
+0381   2???           01336 CALL position_cursor
+Warning[203]: Found opcode in column 1. (RETURN)
+0382   0008           01337 RETURN
+                      01338 
+                      01339 ; NEW FEATURE: Show equals screen with "=" on the left
+0383                  01340 show_equals_screen:
+Warning[203]: Found opcode in column 1. (movlw)
+0383   3001           01341 movlw 0x01
+Warning[203]: Found opcode in column 1. (call)
+0384   2???           01342 call lcd_cmd
+Warning[203]: Found opcode in column 1. (movlw)
+0385   300C           01343 movlw 0x0C            ; Display on, cursor off (no blinking cursor needed)
+Warning[203]: Found opcode in column 1. (call)
+0386   2???           01344 call lcd_cmd
+                      01345 
+                      01346 ; Position cursor at the leftmost position of first line and display equals sign
+Warning[203]: Found opcode in column 1. (MOVLW)
+0387   3080           01347 MOVLW 0x80            ; Leftmost position of first line (position 0)
+Warning[203]: Found opcode in column 1. (CALL)
+0388   2???           01348 CALL lcd_cmd
+Warning[203]: Found opcode in column 1. (MOVLW)
+0389   303D           01349 MOVLW '='
+Warning[203]: Found opcode in column 1. (CALL)
+038A   2???           01350 CALL lcd_data
+Warning[203]: Found opcode in column 1. (RETURN)
+038B   0008           01351 RETURN
+                      01352 
+038C                  01353 display_all_digits_1:
+Warning[203]: Found opcode in column 1. (movf)
+038C   0825           01354 movf digit_array1_0, 0
+Warning[203]: Found opcode in column 1. (addlw)
+038D   3E30           01355 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+038E   2???           01356 call lcd_data
+Warning[203]: Found opcode in column 1. (movf)
+038F   0826           01357 movf digit_array1_1, 0
+Warning[203]: Found opcode in column 1. (addlw)
+0390   3E30           01358 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+0391   2???           01359 call lcd_data
+Warning[203]: Found opcode in column 1. (movf)
+0392   0827           01360 movf digit_array1_2, 0
+Warning[203]: Found opcode in column 1. (addlw)
+MPASM  5.43                       PROJECT.ASM   7-6-2025  21:11:22         PAGE 44
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+0393   3E30           01361 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+0394   2???           01362 call lcd_data
+Warning[203]: Found opcode in column 1. (movf)
+0395   0828           01363 movf digit_array1_3, 0
+Warning[203]: Found opcode in column 1. (addlw)
+0396   3E30           01364 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+0397   2???           01365 call lcd_data
+Warning[203]: Found opcode in column 1. (movf)
+0398   0829           01366 movf digit_array1_4, 0
+Warning[203]: Found opcode in column 1. (addlw)
+0399   3E30           01367 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+039A   2???           01368 call lcd_data
+Warning[203]: Found opcode in column 1. (movf)
+039B   082A           01369 movf digit_array1_5, 0
+Warning[203]: Found opcode in column 1. (addlw)
+039C   3E30           01370 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+039D   2???           01371 call lcd_data
+Warning[203]: Found opcode in column 1. (MOVLW)
+039E   302E           01372 MOVLW '.'
+Warning[203]: Found opcode in column 1. (CALL)
+039F   2???           01373 CALL lcd_data
+Warning[203]: Found opcode in column 1. (movf)
+03A0   082B           01374 movf digit_array1_6, 0
+Warning[203]: Found opcode in column 1. (addlw)
+03A1   3E30           01375 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+03A2   2???           01376 call lcd_data
+Warning[203]: Found opcode in column 1. (movf)
+03A3   082C           01377 movf digit_array1_7, 0
+Warning[203]: Found opcode in column 1. (addlw)
+03A4   3E30           01378 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+03A5   2???           01379 call lcd_data
+Warning[203]: Found opcode in column 1. (movf)
+03A6   082D           01380 movf digit_array1_8, 0
+Warning[203]: Found opcode in column 1. (addlw)
+03A7   3E30           01381 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+03A8   2???           01382 call lcd_data
+Warning[203]: Found opcode in column 1. (movf)
+03A9   082E           01383 movf digit_array1_9, 0
+Warning[203]: Found opcode in column 1. (addlw)
+03AA   3E30           01384 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+03AB   2???           01385 call lcd_data
+Warning[203]: Found opcode in column 1. (movf)
+03AC   082F           01386 movf digit_array1_10, 0
+Warning[203]: Found opcode in column 1. (addlw)
+03AD   3E30           01387 addlw '0'
+MPASM  5.43                       PROJECT.ASM   7-6-2025  21:11:22         PAGE 45
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+Warning[203]: Found opcode in column 1. (call)
+03AE   2???           01388 call lcd_data
+Warning[203]: Found opcode in column 1. (movf)
+03AF   0830           01389 movf digit_array1_11, 0
+Warning[203]: Found opcode in column 1. (addlw)
+03B0   3E30           01390 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+03B1   2???           01391 call lcd_data
+Warning[203]: Found opcode in column 1. (RETURN)
+03B2   0008           01392 RETURN
+                      01393 
+03B3                  01394 display_all_digits_2:
+Warning[203]: Found opcode in column 1. (movf)
+03B3   0831           01395 movf digit_array2_0, 0
+Warning[203]: Found opcode in column 1. (addlw)
+03B4   3E30           01396 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+03B5   2???           01397 call lcd_data
+Warning[203]: Found opcode in column 1. (movf)
+03B6   0832           01398 movf digit_array2_1, 0
+Warning[203]: Found opcode in column 1. (addlw)
+03B7   3E30           01399 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+03B8   2???           01400 call lcd_data
+Warning[203]: Found opcode in column 1. (movf)
+03B9   0833           01401 movf digit_array2_2, 0
+Warning[203]: Found opcode in column 1. (addlw)
+03BA   3E30           01402 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+03BB   2???           01403 call lcd_data
+Warning[203]: Found opcode in column 1. (movf)
+03BC   0834           01404 movf digit_array2_3, 0
+Warning[203]: Found opcode in column 1. (addlw)
+03BD   3E30           01405 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+03BE   2???           01406 call lcd_data
+Warning[203]: Found opcode in column 1. (movf)
+03BF   0835           01407 movf digit_array2_4, 0
+Warning[203]: Found opcode in column 1. (addlw)
+03C0   3E30           01408 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+03C1   2???           01409 call lcd_data
+Warning[203]: Found opcode in column 1. (movf)
+03C2   0836           01410 movf digit_array2_5, 0
+Warning[203]: Found opcode in column 1. (addlw)
+03C3   3E30           01411 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+03C4   2???           01412 call lcd_data
+Warning[203]: Found opcode in column 1. (MOVLW)
+03C5   302E           01413 MOVLW '.'
+Warning[203]: Found opcode in column 1. (CALL)
+03C6   2???           01414 CALL lcd_data
+Warning[203]: Found opcode in column 1. (movf)
+MPASM  5.43                       PROJECT.ASM   7-6-2025  21:11:22         PAGE 46
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+03C7   0837           01415 movf digit_array2_6, 0
+Warning[203]: Found opcode in column 1. (addlw)
+03C8   3E30           01416 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+03C9   2???           01417 call lcd_data
+Warning[203]: Found opcode in column 1. (movf)
+03CA   0838           01418 movf digit_array2_7, 0
+Warning[203]: Found opcode in column 1. (addlw)
+03CB   3E30           01419 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+03CC   2???           01420 call lcd_data
+Warning[203]: Found opcode in column 1. (movf)
+03CD   0839           01421 movf digit_array2_8, 0
+Warning[203]: Found opcode in column 1. (addlw)
+03CE   3E30           01422 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+03CF   2???           01423 call lcd_data
+Warning[203]: Found opcode in column 1. (movf)
+03D0   083A           01424 movf digit_array2_9, 0
+Warning[203]: Found opcode in column 1. (addlw)
+03D1   3E30           01425 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+03D2   2???           01426 call lcd_data
+Warning[203]: Found opcode in column 1. (movf)
+03D3   083B           01427 movf digit_array2_10, 0
+Warning[203]: Found opcode in column 1. (addlw)
+03D4   3E30           01428 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+03D5   2???           01429 call lcd_data
+Warning[203]: Found opcode in column 1. (movf)
+03D6   083C           01430 movf digit_array2_11, 0
+Warning[203]: Found opcode in column 1. (addlw)
+03D7   3E30           01431 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+03D8   2???           01432 call lcd_data
+Warning[203]: Found opcode in column 1. (RETURN)
+03D9   0008           01433 RETURN
+                      01434 
+03DA                  01435 display_result_screen:
+Warning[203]: Found opcode in column 1. (call)
+03DA   2???           01436 call stop_main_timeout
+                      01437 
+                      01438 ; Reset display state to show result
+Warning[203]: Found opcode in column 1. (clrf)
+03DB   01DC           01439 clrf result_display_state
+                      01440 
+Warning[203]: Found opcode in column 1. (movlw)
+03DC   3001           01441 movlw 0x01
+Warning[203]: Found opcode in column 1. (call)
+03DD   2???           01442 call lcd_cmd
+Warning[203]: Found opcode in column 1. (movlw)
+03DE   300C           01443 movlw 0x0C
+Warning[203]: Found opcode in column 1. (call)
+MPASM  5.43                       PROJECT.ASM   7-6-2025  21:11:22         PAGE 47
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+03DF   2???           01444 call lcd_cmd
+                      01445 
+Warning[203]: Found opcode in column 1. (MOVLW)
+03E0   3080           01446 MOVLW 0x80
+Warning[203]: Found opcode in column 1. (CALL)
+03E1   2???           01447 CALL lcd_cmd
+Warning[203]: Found opcode in column 1. (MOVLW)
+03E2   3052           01448 MOVLW 'R'
+Warning[203]: Found opcode in column 1. (CALL)
+03E3   2???           01449 CALL lcd_data
+Warning[203]: Found opcode in column 1. (MOVLW)
+03E4   3065           01450 MOVLW 'e'
+Warning[203]: Found opcode in column 1. (CALL)
+03E5   2???           01451 CALL lcd_data
+Warning[203]: Found opcode in column 1. (MOVLW)
+03E6   3073           01452 MOVLW 's'
+Warning[203]: Found opcode in column 1. (CALL)
+03E7   2???           01453 CALL lcd_data
+Warning[203]: Found opcode in column 1. (MOVLW)
+03E8   3075           01454 MOVLW 'u'
+Warning[203]: Found opcode in column 1. (CALL)
+03E9   2???           01455 CALL lcd_data
+Warning[203]: Found opcode in column 1. (MOVLW)
+03EA   306C           01456 MOVLW 'l'
+Warning[203]: Found opcode in column 1. (CALL)
+03EB   2???           01457 CALL lcd_data
+Warning[203]: Found opcode in column 1. (MOVLW)
+03EC   3074           01458 MOVLW 't'
+Warning[203]: Found opcode in column 1. (CALL)
+03ED   2???           01459 CALL lcd_data
+Warning[203]: Found opcode in column 1. (MOVLW)
+03EE   303A           01460 MOVLW ':'
+Warning[203]: Found opcode in column 1. (CALL)
+03EF   2???           01461 CALL lcd_data
+                      01462 
+Warning[203]: Found opcode in column 1. (MOVLW)
+03F0   30C0           01463 MOVLW 0xc0
+Warning[203]: Found opcode in column 1. (CALL)
+03F1   2???           01464 CALL lcd_cmd
+Warning[203]: Found opcode in column 1. (movf)
+03F2   083D           01465 movf result_array_0, 0
+Warning[203]: Found opcode in column 1. (addlw)
+03F3   3E30           01466 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+03F4   2???           01467 call lcd_data
+Warning[203]: Found opcode in column 1. (movf)
+03F5   083E           01468 movf result_array_1, 0
+Warning[203]: Found opcode in column 1. (addlw)
+03F6   3E30           01469 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+03F7   2???           01470 call lcd_data
+Warning[203]: Found opcode in column 1. (movf)
+03F8   083F           01471 movf result_array_2, 0
+MPASM  5.43                       PROJECT.ASM   7-6-2025  21:11:22         PAGE 48
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+Warning[203]: Found opcode in column 1. (addlw)
+03F9   3E30           01472 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+03FA   2???           01473 call lcd_data
+Warning[203]: Found opcode in column 1. (movf)
+03FB   0840           01474 movf result_array_3, 0
+Warning[203]: Found opcode in column 1. (addlw)
+03FC   3E30           01475 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+03FD   2???           01476 call lcd_data
+Warning[203]: Found opcode in column 1. (movf)
+03FE   0841           01477 movf result_array_4, 0
+Warning[203]: Found opcode in column 1. (addlw)
+03FF   3E30           01478 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+0400   2???           01479 call lcd_data
+Warning[203]: Found opcode in column 1. (movf)
+0401   0842           01480 movf result_array_5, 0
+Warning[203]: Found opcode in column 1. (addlw)
+0402   3E30           01481 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+0403   2???           01482 call lcd_data
+Warning[203]: Found opcode in column 1. (MOVLW)
+0404   302E           01483 MOVLW '.'
+Warning[203]: Found opcode in column 1. (CALL)
+0405   2???           01484 CALL lcd_data
+Warning[203]: Found opcode in column 1. (movf)
+0406   0843           01485 movf result_array_6, 0
+Warning[203]: Found opcode in column 1. (addlw)
+0407   3E30           01486 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+0408   2???           01487 call lcd_data
+Warning[203]: Found opcode in column 1. (movf)
+0409   0844           01488 movf result_array_7, 0
+Warning[203]: Found opcode in column 1. (addlw)
+040A   3E30           01489 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+040B   2???           01490 call lcd_data
+Warning[203]: Found opcode in column 1. (movf)
+040C   0845           01491 movf result_array_8, 0
+Warning[203]: Found opcode in column 1. (addlw)
+040D   3E30           01492 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+040E   2???           01493 call lcd_data
+Warning[203]: Found opcode in column 1. (movf)
+040F   0846           01494 movf result_array_9, 0
+Warning[203]: Found opcode in column 1. (addlw)
+0410   3E30           01495 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+0411   2???           01496 call lcd_data
+Warning[203]: Found opcode in column 1. (movf)
+0412   0847           01497 movf result_array_10, 0
+Warning[203]: Found opcode in column 1. (addlw)
+MPASM  5.43                       PROJECT.ASM   7-6-2025  21:11:22         PAGE 49
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+0413   3E30           01498 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+0414   2???           01499 call lcd_data
+Warning[203]: Found opcode in column 1. (movf)
+0415   0848           01500 movf result_array_11, 0
+Warning[203]: Found opcode in column 1. (addlw)
+0416   3E30           01501 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+0417   2???           01502 call lcd_data
+Warning[203]: Found opcode in column 1. (return)
+0418   0008           01503 return
+                      01504 
+0419                  01505 position_cursor:
+Warning[203]: Found opcode in column 1. (movf)
+0419   0824           01506 movf digit_cursor_pos, 0
+Warning[203]: Found opcode in column 1. (addlw)
+041A   3EC0           01507 addlw 0xC0
+Warning[203]: Found opcode in column 1. (call)
+041B   2???           01508 call lcd_cmd
+Warning[203]: Found opcode in column 1. (return)
+041C   0008           01509 return
+                      01510 
+                      01511 ;----------------------------------------DIGIT MANIPULATION FUNCTIONS-----------------------------------
+                            --------------------------
+041D                  01512 increment_current_digit_1:
+Warning[203]: Found opcode in column 1. (movf)
+041D   0824           01513 movf digit_cursor_pos, 0
+Warning[203]: Found opcode in column 1. (sublw)
+041E   3C06           01514 sublw .6
+Warning[203]: Found opcode in column 1. (btfss)
+041F   1C03           01515 btfss STATUS, C
+Warning[203]: Found opcode in column 1. (goto)
+0420   2???           01516 goto adjust_index_1
+Warning[203]: Found opcode in column 1. (movf)
+0421   0824           01517 movf digit_cursor_pos, 0
+Warning[203]: Found opcode in column 1. (addlw)
+0422   3E25           01518 addlw digit_array1_0
+Warning[203]: Found opcode in column 1. (movwf)
+0423   0084           01519 movwf FSR
+Warning[203]: Found opcode in column 1. (goto)
+0424   2???           01520 goto increment_digit_1
+0425                  01521 adjust_index_1:
+Warning[203]: Found opcode in column 1. (movf)
+0425   0824           01522 movf digit_cursor_pos, 0
+Warning[203]: Found opcode in column 1. (addlw)
+0426   3EFF           01523 addlw .255
+Warning[203]: Found opcode in column 1. (addlw)
+0427   3E25           01524 addlw digit_array1_0
+Warning[203]: Found opcode in column 1. (movwf)
+0428   0084           01525 movwf FSR
+0429                  01526 increment_digit_1:
+Warning[203]: Found opcode in column 1. (incf)
+0429   0A80           01527 incf INDF, 1
+MPASM  5.43                       PROJECT.ASM   7-6-2025  21:11:22         PAGE 50
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+Warning[203]: Found opcode in column 1. (movf)
+042A   0800           01528 movf INDF, 0
+Warning[203]: Found opcode in column 1. (sublw)
+042B   3C0A           01529 sublw .10
+Warning[203]: Found opcode in column 1. (btfsc)
+042C   1903           01530 btfsc STATUS, Z
+Warning[203]: Found opcode in column 1. (clrf)
+042D   0180           01531 clrf INDF
+Warning[203]: Found opcode in column 1. (return)
+042E   0008           01532 return
+                      01533 
+042F                  01534 increment_current_digit_2:
+Warning[203]: Found opcode in column 1. (movf)
+042F   0824           01535 movf digit_cursor_pos, 0
+Warning[203]: Found opcode in column 1. (sublw)
+0430   3C06           01536 sublw .6
+Warning[203]: Found opcode in column 1. (btfss)
+0431   1C03           01537 btfss STATUS, C
+Warning[203]: Found opcode in column 1. (goto)
+0432   2???           01538 goto adjust_index_2
+Warning[203]: Found opcode in column 1. (movf)
+0433   0824           01539 movf digit_cursor_pos, 0
+Warning[203]: Found opcode in column 1. (addlw)
+0434   3E31           01540 addlw digit_array2_0
+Warning[203]: Found opcode in column 1. (movwf)
+0435   0084           01541 movwf FSR
+Warning[203]: Found opcode in column 1. (goto)
+0436   2???           01542 goto increment_digit_2
+0437                  01543 adjust_index_2:
+Warning[203]: Found opcode in column 1. (movf)
+0437   0824           01544 movf digit_cursor_pos, 0
+Warning[203]: Found opcode in column 1. (addlw)
+0438   3EFF           01545 addlw .255
+Warning[203]: Found opcode in column 1. (addlw)
+0439   3E31           01546 addlw digit_array2_0
+Warning[203]: Found opcode in column 1. (movwf)
+043A   0084           01547 movwf FSR
+043B                  01548 increment_digit_2:
+Warning[203]: Found opcode in column 1. (incf)
+043B   0A80           01549 incf INDF, 1
+Warning[203]: Found opcode in column 1. (movf)
+043C   0800           01550 movf INDF, 0
+Warning[203]: Found opcode in column 1. (sublw)
+043D   3C0A           01551 sublw .10
+Warning[203]: Found opcode in column 1. (btfsc)
+043E   1903           01552 btfsc STATUS, Z
+Warning[203]: Found opcode in column 1. (clrf)
+043F   0180           01553 clrf INDF
+Warning[203]: Found opcode in column 1. (return)
+0440   0008           01554 return
+                      01555 
+0441                  01556 update_single_digit_display_1:
+Warning[203]: Found opcode in column 1. (movf)
+MPASM  5.43                       PROJECT.ASM   7-6-2025  21:11:22         PAGE 51
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+0441   0824           01557 movf digit_cursor_pos, 0
+Warning[203]: Found opcode in column 1. (addlw)
+0442   3EC0           01558 addlw 0xC0
+Warning[203]: Found opcode in column 1. (call)
+0443   2???           01559 call lcd_cmd
+Warning[203]: Found opcode in column 1. (movf)
+0444   0824           01560 movf digit_cursor_pos, 0
+Warning[203]: Found opcode in column 1. (sublw)
+0445   3C06           01561 sublw .6
+Warning[203]: Found opcode in column 1. (btfss)
+0446   1C03           01562 btfss STATUS, C
+Warning[203]: Found opcode in column 1. (goto)
+0447   2???           01563 goto adjust_display_index_1
+Warning[203]: Found opcode in column 1. (movf)
+0448   0824           01564 movf digit_cursor_pos, 0
+Warning[203]: Found opcode in column 1. (addlw)
+0449   3E25           01565 addlw digit_array1_0
+Warning[203]: Found opcode in column 1. (movwf)
+044A   0084           01566 movwf FSR
+Warning[203]: Found opcode in column 1. (goto)
+044B   2???           01567 goto display_digit_1
+044C                  01568 adjust_display_index_1:
+Warning[203]: Found opcode in column 1. (movf)
+044C   0824           01569 movf digit_cursor_pos, 0
+Warning[203]: Found opcode in column 1. (addlw)
+044D   3EFF           01570 addlw .255
+Warning[203]: Found opcode in column 1. (addlw)
+044E   3E25           01571 addlw digit_array1_0
+Warning[203]: Found opcode in column 1. (movwf)
+044F   0084           01572 movwf FSR
+0450                  01573 display_digit_1:
+Warning[203]: Found opcode in column 1. (movf)
+0450   0800           01574 movf INDF, 0
+Warning[203]: Found opcode in column 1. (addlw)
+0451   3E30           01575 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+0452   2???           01576 call lcd_data
+Warning[203]: Found opcode in column 1. (movf)
+0453   0824           01577 movf digit_cursor_pos, 0
+Warning[203]: Found opcode in column 1. (addlw)
+0454   3EC0           01578 addlw 0xC0
+Warning[203]: Found opcode in column 1. (call)
+0455   2???           01579 call lcd_cmd
+Warning[203]: Found opcode in column 1. (return)
+0456   0008           01580 return
+                      01581 
+0457                  01582 update_single_digit_display_2:
+Warning[203]: Found opcode in column 1. (movf)
+0457   0824           01583 movf digit_cursor_pos, 0
+Warning[203]: Found opcode in column 1. (addlw)
+0458   3EC0           01584 addlw 0xC0
+Warning[203]: Found opcode in column 1. (call)
+0459   2???           01585 call lcd_cmd
+MPASM  5.43                       PROJECT.ASM   7-6-2025  21:11:22         PAGE 52
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+Warning[203]: Found opcode in column 1. (movf)
+045A   0824           01586 movf digit_cursor_pos, 0
+Warning[203]: Found opcode in column 1. (sublw)
+045B   3C06           01587 sublw .6
+Warning[203]: Found opcode in column 1. (btfss)
+045C   1C03           01588 btfss STATUS, C
+Warning[203]: Found opcode in column 1. (goto)
+045D   2???           01589 goto adjust_display_index_2
+Warning[203]: Found opcode in column 1. (movf)
+045E   0824           01590 movf digit_cursor_pos, 0
+Warning[203]: Found opcode in column 1. (addlw)
+045F   3E31           01591 addlw digit_array2_0
+Warning[203]: Found opcode in column 1. (movwf)
+0460   0084           01592 movwf FSR
+Warning[203]: Found opcode in column 1. (goto)
+0461   2???           01593 goto display_digit_2
+0462                  01594 adjust_display_index_2:
+Warning[203]: Found opcode in column 1. (movf)
+0462   0824           01595 movf digit_cursor_pos, 0
+Warning[203]: Found opcode in column 1. (addlw)
+0463   3EFF           01596 addlw .255
+Warning[203]: Found opcode in column 1. (addlw)
+0464   3E31           01597 addlw digit_array2_0
+Warning[203]: Found opcode in column 1. (movwf)
+0465   0084           01598 movwf FSR
+0466                  01599 display_digit_2:
+Warning[203]: Found opcode in column 1. (movf)
+0466   0800           01600 movf INDF, 0
+Warning[203]: Found opcode in column 1. (addlw)
+0467   3E30           01601 addlw '0'
+Warning[203]: Found opcode in column 1. (call)
+0468   2???           01602 call lcd_data
+Warning[203]: Found opcode in column 1. (movf)
+0469   0824           01603 movf digit_cursor_pos, 0
+Warning[203]: Found opcode in column 1. (addlw)
+046A   3EC0           01604 addlw 0xC0
+Warning[203]: Found opcode in column 1. (call)
+046B   2???           01605 call lcd_cmd
+Warning[203]: Found opcode in column 1. (return)
+046C   0008           01606 return
+                      01607 
+046D                  01608 debounce:
+Warning[203]: Found opcode in column 1. (movlw)
+046D   300A           01609 movlw .10
+Warning[203]: Found opcode in column 1. (call)
+046E   2???           01610 call delay_ms
+Warning[203]: Found opcode in column 1. (return)
+046F   0008           01611 return
+                      01612 
+                      01613 ;----------------------------------------DELAY ROUTINES-------------------------------------------------
+                            ------------
+0470                  01614 delay_500ms:
+Warning[203]: Found opcode in column 1. (movlw)
+MPASM  5.43                       PROJECT.ASM   7-6-2025  21:11:22         PAGE 53
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+0470   30FA           01615 movlw .250
+Warning[203]: Found opcode in column 1. (call)
+0471   2???           01616 call delay_ms
+Warning[203]: Found opcode in column 1. (movlw)
+0472   30FA           01617 movlw .250
+Warning[203]: Found opcode in column 1. (call)
+0473   2???           01618 call delay_ms
+Warning[203]: Found opcode in column 1. (return)
+0474   0008           01619 return
+                      01620 
+0475                  01621 delay_20ms:
+Warning[203]: Found opcode in column 1. (movlw)
+0475   3014           01622 movlw .20
+Warning[203]: Found opcode in column 1. (call)
+0476   2???           01623 call delay_ms
+Warning[203]: Found opcode in column 1. (return)
+0477   0008           01624 return
+                      01625 
+0478                  01626 delay_5ms:
+Warning[203]: Found opcode in column 1. (movlw)
+0478   3005           01627 movlw .5
+Warning[203]: Found opcode in column 1. (call)
+0479   2???           01628 call delay_ms
+Warning[203]: Found opcode in column 1. (return)
+047A   0008           01629 return
+                      01630 
+047B                  01631 delay_1ms:
+Warning[203]: Found opcode in column 1. (movlw)
+047B   3001           01632 movlw .1
+Warning[203]: Found opcode in column 1. (call)
+047C   2???           01633 call delay_ms
+Warning[203]: Found opcode in column 1. (return)
+047D   0008           01634 return
+                      01635 
+047E                  01636 delay_ms:
+Warning[203]: Found opcode in column 1. (movwf)
+047E   00A0           01637 movwf delay_ms_count
+047F                  01638 ms_loop:
+Warning[203]: Found opcode in column 1. (movlw)
+047F   30C7           01639 movlw 0xC7
+Warning[203]: Found opcode in column 1. (movwf)
+0480   00A2           01640 movwf temp_char
+0481                  01641 us_loop:
+Warning[203]: Found opcode in column 1. (decfsz)
+0481   0BA2           01642 decfsz temp_char, 1
+Warning[203]: Found opcode in column 1. (goto)
+0482   2???           01643 goto us_loop
+Warning[203]: Found opcode in column 1. (decfsz)
+0483   0BA0           01644 decfsz delay_ms_count, 1
+Warning[203]: Found opcode in column 1. (goto)
+0484   2???           01645 goto ms_loop
+Warning[203]: Found opcode in column 1. (return)
+0485   0008           01646 return
+MPASM  5.43                       PROJECT.ASM   7-6-2025  21:11:22         PAGE 54
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+                      01647 
+                      01648 ;----------------------------------------USART COMMUNICATION SUBROUTINES--------------------------------
+                            -----------------------------
+0486                  01649 init_master_usart:
+0486   1683 1303      01650     BANKSEL SPBRG
+0488   3019           01651     MOVLW   .25
+Message[302]: Register in operand not in bank 0.  Ensure that bank bits are correct.
+0489   0099           01652     MOVWF   SPBRG
+048A   1683 1303      01653     BANKSEL TXSTA
+Message[302]: Register in operand not in bank 0.  Ensure that bank bits are correct.
+048C   1218           01654     BCF     TXSTA, SYNC
+Message[302]: Register in operand not in bank 0.  Ensure that bank bits are correct.
+048D   1698           01655     BSF     TXSTA, TXEN
+048E   1283 1303      01656     BANKSEL RCSTA
+0490   1798           01657     BSF     RCSTA, SPEN
+0491   1618           01658     BSF     RCSTA, CREN
+0492   1683 1303      01659     BANKSEL PIE1
+Message[302]: Register in operand not in bank 0.  Ensure that bank bits are correct.
+0494   168C           01660     BSF     PIE1, RCIE
+0495   1283 1303      01661     BANKSEL PIR1
+0497   128C           01662     BCF     PIR1, RCIF
+0498   0008           01663     RETURN
+                      01664 
+0499                  01665 show_the_second_num_and_transmit:
+Warning[203]: Found opcode in column 1. (MOVF)
+0499   084E           01666 MOVF number_transmitted, 0
+Warning[203]: Found opcode in column 1. (SUBLW)
+049A   3C00           01667 SUBLW .0
+Warning[203]: Found opcode in column 1. (BTFSS)
+049B   1D03           01668 BTFSS STATUS, Z
+Warning[203]: Found opcode in column 1. (GOTO)
+049C   2???           01669 GOTO just_show_second_num
+Warning[203]: Found opcode in column 1. (CALL)
+049D   2???           01670 CALL transmit_first_number_to_slave
+Warning[203]: Found opcode in column 1. (MOVLW)
+049E   3001           01671 MOVLW .1
+Warning[203]: Found opcode in column 1. (MOVWF)
+049F   00CE           01672 MOVWF number_transmitted
+04A0                  01673 just_show_second_num:
+Warning[203]: Found opcode in column 1. (CALL)
+04A0   2???           01674 CALL show_the_second_num
+Warning[203]: Found opcode in column 1. (RETURN)
+04A1   0008           01675 RETURN
+                      01676 
+04A2                  01677 transmit_first_number_to_slave:
+Warning[203]: Found opcode in column 1. (CLRF)
+04A2   01CD           01678 CLRF transmit_index
+04A3                  01679 transmit_loop:
+Warning[203]: Found opcode in column 1. (MOVF)
+04A3   084D           01680 MOVF transmit_index, 0
+Warning[203]: Found opcode in column 1. (ADDLW)
+04A4   3E25           01681 ADDLW digit_array1_0
+Warning[203]: Found opcode in column 1. (MOVWF)
+MPASM  5.43                       PROJECT.ASM   7-6-2025  21:11:22         PAGE 55
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+04A5   0084           01682 MOVWF FSR
+Warning[203]: Found opcode in column 1. (MOVF)
+04A6   0800           01683 MOVF INDF, 0
+Warning[203]: Found opcode in column 1. (CALL)
+04A7   2???           01684 CALL usart_send_byte
+Warning[203]: Found opcode in column 1. (CALL)
+04A8   2???           01685 CALL delay_5ms
+Warning[203]: Found opcode in column 1. (INCF)
+04A9   0ACD           01686 INCF transmit_index, 1
+Warning[203]: Found opcode in column 1. (MOVF)
+04AA   084D           01687 MOVF transmit_index, 0
+Warning[203]: Found opcode in column 1. (SUBLW)
+04AB   3C0C           01688 SUBLW .12
+Warning[203]: Found opcode in column 1. (BTFSS)
+04AC   1D03           01689 BTFSS STATUS, Z
+Warning[203]: Found opcode in column 1. (GOTO)
+04AD   2???           01690 GOTO transmit_loop
+Warning[203]: Found opcode in column 1. (RETURN)
+04AE   0008           01691 RETURN
+                      01692 
+04AF                  01693 transmit_second_number_to_slave:
+Warning[203]: Found opcode in column 1. (CLRF)
+04AF   01CD           01694 CLRF transmit_index
+04B0                  01695 transmit_loop_2:
+Warning[203]: Found opcode in column 1. (MOVF)
+04B0   084D           01696 MOVF transmit_index, 0
+Warning[203]: Found opcode in column 1. (ADDLW)
+04B1   3E31           01697 ADDLW digit_array2_0
+Warning[203]: Found opcode in column 1. (MOVWF)
+04B2   0084           01698 MOVWF FSR
+Warning[203]: Found opcode in column 1. (MOVF)
+04B3   0800           01699 MOVF INDF, 0
+Warning[203]: Found opcode in column 1. (CALL)
+04B4   2???           01700 CALL usart_send_byte
+Warning[203]: Found opcode in column 1. (CALL)
+04B5   2???           01701 CALL delay_5ms
+Warning[203]: Found opcode in column 1. (INCF)
+04B6   0ACD           01702 INCF transmit_index, 1
+Warning[203]: Found opcode in column 1. (MOVF)
+04B7   084D           01703 MOVF transmit_index, 0
+Warning[203]: Found opcode in column 1. (SUBLW)
+04B8   3C0C           01704 SUBLW .12
+Warning[203]: Found opcode in column 1. (BTFSS)
+04B9   1D03           01705 BTFSS STATUS, Z
+Warning[203]: Found opcode in column 1. (GOTO)
+04BA   2???           01706 GOTO transmit_loop_2
+Warning[203]: Found opcode in column 1. (RETURN)
+04BB   0008           01707 RETURN
+                      01708 
+                      01709 
+04BC                  01710 usart_send_byte:
+Warning[205]: Found directive in column 1. (BANKSEL)
+04BC   1683 1303      01711 BANKSEL TXSTA
+MPASM  5.43                       PROJECT.ASM   7-6-2025  21:11:22         PAGE 56
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+Warning[203]: Found opcode in column 1. (BTFSS)
+Message[302]: Register in operand not in bank 0.  Ensure that bank bits are correct.
+04BE   1C98           01712 BTFSS TXSTA, TRMT
+Warning[203]: Found opcode in column 1. (GOTO)
+04BF   2???           01713 GOTO $-1
+Warning[205]: Found directive in column 1. (BANKSEL)
+04C0   1283 1303      01714 BANKSEL TXREG
+Warning[203]: Found opcode in column 1. (MOVWF)
+04C2   0099           01715 MOVWF TXREG
+Warning[203]: Found opcode in column 1. (RETURN)
+04C3   0008           01716 RETURN
+                      01717 
+                      01718 
+Warning[205]: Found directive in column 1. (INCLUDE)
+                      01719 INCLUDE "LCDIS.INC"
+                      00001 ;--------------------------------------------------------------
+                      00002 ;       LCDIS.INC               MPB     19-12-05
+                      00003 ;
+                      00004 ;       Include file to operate 16x2 LCD display
+                      00005 ;       Uses GPR 70 - 75
+                      00006 ;       
+                      00007 ;       Final version
+                      00008 ;--------------------------------------------------------------
+                      00009 
+  00000070            00010 Timer1  EQU     70              ; 1ms count register
+  00000071            00011 TimerX  EQU     71              ; Xms count register
+  00000072            00012 Var     EQU     72              ; Output variable
+  00000073            00013 Point   EQU     73              ; Program table pointer
+  00000074            00014 Select  EQU     74              ; Used to set or clear RS bit
+  00000075            00015 OutCod  EQU     75              ; Temp store for output code
+                      00016 
+  00000001            00017 RS      EQU     1               ; Register select output bit
+  00000002            00018 E       EQU     2               ; Enable display input
+                      00019 
+                      00020 
+                      00021 ;--------------------------------------------------------------
+                      00022 ;       1ms delay with 1us cycle time (1000 cycles)
+                      00023 ;--------------------------------------------------------------
+04C4   30F9           00024 onems   MOVLW   D'249'          ; Count for 1ms delay 
+04C5   00F0           00025                 MOVWF   Timer1          ; Load count    2 + (1 + 1 + 2) * 248 + 1 + 2 + 2
+04C6   0000           00026 loop1   NOP                     ; Pad for 4 cycle loop
+Message[305]: Using default destination of 1 (file).
+04C7   0BF0           00027                 DECFSZ  Timer1          ; Count
+04C8   2???           00028                 GOTO    loop1           ; until Z
+04C9   0008           00029                 RETURN                  ; and finish
+                      00030 
+                      00031 ;--------------------------------------------------------------
+                      00032 ;       Delay Xms
+                      00033 ;       Receives count in W, uses Onems
+                      00034 ;--------------------------------------------------------------
+04CA   00F1           00035 xms             MOVWF   TimerX          ; Count for X ms
+04CB   2???           00036 loopX   CALL    onems           ; Delay 1ms
+Message[305]: Using default destination of 1 (file).
+MPASM  5.43                       PROJECT.ASM   7-6-2025  21:11:22         PAGE 57
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+04CC   0BF1           00037                 DECFSZ  TimerX          ; Repeat X times 
+04CD   2???           00038                 GOTO    loopX           ; until Z
+04CE   0008           00039                 RETURN                  ; and finish
+                      00040 
+                      00041 ;--------------------------------------------------------------
+                      00042 ;       Generate data/command clock siganl E
+                      00043 ;--------------------------------------------------------------
+04CF   1508           00044 pulseE  BSF     PORTD,E         ; Set E high
+04D0   2???           00045         CALL    onems           ; Delay 1ms
+04D1   1108           00046         BCF     PORTD,E         ; Reset E low
+                      00047         ;CALL   onems           ; Delay 1ms
+04D2   0008           00048         RETURN                  ; done
+                      00049 
+                      00050 ;--------------------------------------------------------------
+                      00051 ;       Send a command byte in two nibbles from RB4 - RB7
+                      00052 ;       Receives command in W, uses PulseE and Onems
+                      00053 ;--------------------------------------------------------------
+04D3   00F5           00054 send    MOVWF   OutCod          ; Store output code
+04D4   39F0           00055         ANDLW   0F0             ; Clear low nybble
+04D5   0088           00056         MOVWF   PORTD           ; Output high nybble
+04D6   18F4           00057         BTFSC   Select,RS       ; Test RS bit
+04D7   1488           00058         BSF     PORTD,RS        ; and set for data
+04D8   2???           00059         CALL    pulseE          ; and clock display register
+                      00060         ;CALL   onems           ; wait 1ms for display
+                      00061 
+Message[305]: Using default destination of 1 (file).
+04D9   0EF5           00062         SWAPF   OutCod          ; Swap low and high nybbles 
+04DA   0875           00063         MOVF    OutCod,W        ; Retrieve output code
+04DB   39F0           00064         ANDLW   0F0             ; Clear low nybble
+04DC   0088           00065         MOVWF   PORTD           ; Output low nybble
+04DD   18F4           00066         BTFSC   Select,RS       ; Test RS bit
+04DE   1488           00067         BSF     PORTD,RS        ; and set for data
+04DF   2???           00068         CALL    pulseE          ; and clock display register
+                      00069         ;CALL   onems           ; wait 1ms for display
+04E0   0008           00070         RETURN                  ; done
+                      00071 
+                      00072 ;--------------------------------------------------------------
+                      00073 ;       Initialise the display
+                      00074 ;       Uses Send
+                      00075 ;--------------------------------------------------------------
+04E1   3064           00076 inid    MOVLW   D'100'          ; Load count for 100ms delay
+04E2   2???           00077         CALL    xms             ; and wait for display start
+04E3   30F0           00078         MOVLW   0F0             ; Mask for select code
+04E4   00F4           00079         MOVWF   Select          ; High nybble not masked
+                      00080 
+04E5   3030           00081         MOVLW   0x30            ; Load initial nibble
+04E6   0088           00082         MOVWF   PORTD           ; and output it to display
+04E7   2???           00083         CALL    pulseE          ; Latch initial code
+04E8   3005           00084         MOVLW   D'5'            ; Set delay 5ms
+04E9   2???           00085         CALL    xms             ; and wait
+04EA   2???           00086         CALL    pulseE          ; Latch initial code again
+04EB   2???           00087         CALL    onems           ; Wait 1ms
+04EC   2???           00088         CALL    pulseE          ; Latch initial code again
+MPASM  5.43                       PROJECT.ASM   7-6-2025  21:11:22         PAGE 58
+
+
+LOC  OBJECT CODE     LINE SOURCE TEXT
+  VALUE
+
+04ED   1208           00089         BCF     PORTD,4         ; Set 4-bit mode
+04EE   2???           00090         CALL    pulseE          ; Latch it
+                      00091         
+04EF   3028           00092         MOVLW   0x28            ; Set 4-bit mode, 2 lines
+04F0   2???           00093         CALL    send            ; and send code
+04F1   3008           00094         MOVLW   0x08            ; Switch off display
+04F2   2???           00095         CALL    send            ; and send code
+04F3   3001           00096         MOVLW   0x01            ; Code to clear display
+04F4   2???           00097         CALL    send            ; and send code
+04F5   3006           00098         MOVLW   0x06            ; Enable cursor auto inc  
+04F6   2???           00099         CALL    send            ; and send code
+04F7   3080           00100         MOVLW   0x80            ; Zero display address
+04F8   2???           00101         CALL    send            ; and send code
+04F9   300C           00102         MOVLW   0x0C            ; Turn on display  
+04FA   2???           00103         CALL    send            ; and send code
+                      00104 
+04FB   0008           00105         RETURN                  ; Done
+                      00106 
+                      00107 ;--------------------------------------------------------------
+Warning[205]: Found directive in column 1. (END)
+3731                  01720 END
+MPASM  5.43                       PROJECT.ASM   7-6-2025  21:11:22         PAGE 59
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+ACKDT                             00000005
+ACKEN                             00000004
+ACKSTAT                           00000006
+ADCON0                            0000001F
+ADCON1                            0000009F
+ADCS0                             00000006
+ADCS1                             00000007
+ADCS2                             00000006
+ADDEN                             00000003
+ADFM                              00000007
+ADIE                              00000006
+ADIF                              00000006
+ADON                              00000000
+ADRESH                            0000001E
+ADRESL                            0000009E
+BCLIE                             00000003
+BCLIF                             00000003
+BF                                00000000
+BRGH                              00000002
+C                                 00000000
+C1INV                             00000004
+C1OUT                             00000006
+C2INV                             00000005
+C2OUT                             00000007
+CCP1CON                           00000017
+CCP1IE                            00000002
+CCP1IF                            00000002
+CCP1M0                            00000000
+CCP1M1                            00000001
+CCP1M2                            00000002
+CCP1M3                            00000003
+CCP1X                             00000005
+CCP1Y                             00000004
+CCP2CON                           0000001D
+CCP2IE                            00000000
+CCP2IF                            00000000
+CCP2M0                            00000000
+CCP2M1                            00000001
+CCP2M2                            00000002
+CCP2M3                            00000003
+CCP2X                             00000005
+CCP2Y                             00000004
+CCPR1                             00000015
+CCPR1H                            00000016
+CCPR1L                            00000015
+CCPR2                             0000001B
+CCPR2H                            0000001C
+CCPR2L                            0000001B
+CHS0                              00000003
+CHS1                              00000004
+CHS2                              00000005
+CIS                               00000003
+CKE                               00000006
+MPASM  5.43                       PROJECT.ASM   7-6-2025  21:11:22         PAGE 60
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+CKP                               00000004
+CM0                               00000000
+CM1                               00000001
+CM2                               00000002
+CMCON                             0000009C
+CMIE                              00000006
+CMIF                              00000006
+CREN                              00000004
+CSRC                              00000007
+CVR0                              00000000
+CVR1                              00000001
+CVR2                              00000002
+CVR3                              00000003
+CVRCON                            0000009D
+CVREN                             00000007
+CVROE                             00000006
+CVRR                              00000005
+D                                 00000005
+DATA_ADDRESS                      00000005
+DC                                00000001
+DOUBLE_CLICK_TIMEOUT              0000000F
+D_A                               00000005
+D_NOT_A                           00000005
+E                                 00000002
+EEADR                             0000010D
+EEADRH                            0000010F
+EECON1                            0000018C
+EECON2                            0000018D
+EEDATA                            0000010C
+EEDATH                            0000010E
+EEIE                              00000004
+EEIF                              00000004
+EEPGD                             00000007
+F                                 00000001
+FERR                              00000002
+FSR                               00000004
+GCEN                              00000007
+GIE                               00000007
+GO                                00000002
+GO_DONE                           00000002
+GO_NOT_DONE                       00000002
+I2C_DATA                          00000005
+I2C_READ                          00000002
+I2C_START                         00000003
+I2C_STOP                          00000004
+IBF                               00000007
+IBOV                              00000005
+INDF                              00000000
+INTCON                            0000000B
+INTE                              00000004
+INTEDG                            00000006
+INTF                              00000001
+IRP                               00000007
+MPASM  5.43                       PROJECT.ASM   7-6-2025  21:11:22         PAGE 61
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+ISR_handler                       00000084
+NOT_A                             00000005
+NOT_ADDRESS                       00000005
+NOT_BO                            00000000
+NOT_BOR                           00000000
+NOT_DONE                          00000002
+NOT_PD                            00000003
+NOT_POR                           00000001
+NOT_RBPU                          00000007
+NOT_RC8                           00000006
+NOT_T1SYNC                        00000002
+NOT_TO                            00000004
+NOT_TX8                           00000006
+NOT_W                             00000002
+NOT_WRITE                         00000002
+OBF                               00000006
+OERR                              00000001
+OPTION_REG                        00000081
+OutCod                            00000075
+P                                 00000004
+PCFG0                             00000000
+PCFG1                             00000001
+PCFG2                             00000002
+PCFG3                             00000003
+PCL                               00000002
+PCLATH                            0000000A
+PCON                              0000008E
+PEIE                              00000006
+PEN                               00000002
+PIE1                              0000008C
+PIE2                              0000008D
+PIR1                              0000000C
+PIR2                              0000000D
+PORTA                             00000005
+PORTB                             00000006
+PORTC                             00000007
+PORTD                             00000008
+PORTE                             00000009
+PR2                               00000092
+PS0                               00000000
+PS1                               00000001
+PS2                               00000002
+PSA                               00000003
+PSPIE                             00000007
+PSPIF                             00000007
+PSPMODE                           00000004
+Point                             00000073
+R                                 00000002
+RA0                               00000000
+RA1                               00000001
+RA2                               00000002
+RA3                               00000003
+RA4                               00000004
+MPASM  5.43                       PROJECT.ASM   7-6-2025  21:11:22         PAGE 62
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+RA5                               00000005
+RB0                               00000000
+RB1                               00000001
+RB2                               00000002
+RB3                               00000003
+RB4                               00000004
+RB5                               00000005
+RB6                               00000006
+RB7                               00000007
+RBIE                              00000003
+RBIF                              00000000
+RC0                               00000000
+RC1                               00000001
+RC2                               00000002
+RC3                               00000003
+RC4                               00000004
+RC5                               00000005
+RC6                               00000006
+RC7                               00000007
+RC8_9                             00000006
+RC9                               00000006
+RCD8                              00000000
+RCEN                              00000003
+RCIE                              00000005
+RCIF                              00000005
+RCREG                             0000001A
+RCSTA                             00000018
+RD                                00000000
+RD0                               00000000
+RD1                               00000001
+RD2                               00000002
+RD3                               00000003
+RD4                               00000004
+RD5                               00000005
+RD6                               00000006
+RD7                               00000007
+RE0                               00000000
+RE1                               00000001
+RE2                               00000002
+READ_WRITE                        00000002
+RP0                               00000005
+RP1                               00000006
+RS                                00000001
+RSEN                              00000001
+RX9                               00000006
+RX9D                              00000000
+R_NOT_W                           00000002
+R_W                               00000002
+S                                 00000003
+SEN                               00000000
+SMP                               00000007
+SPBRG                             00000099
+SPEN                              00000007
+MPASM  5.43                       PROJECT.ASM   7-6-2025  21:11:22         PAGE 63
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+SREN                              00000005
+SSPADD                            00000093
+SSPBUF                            00000013
+SSPCON                            00000014
+SSPCON2                           00000091
+SSPEN                             00000005
+SSPIE                             00000003
+SSPIF                             00000003
+SSPM0                             00000000
+SSPM1                             00000001
+SSPM2                             00000002
+SSPM3                             00000003
+SSPOV                             00000006
+SSPSTAT                           00000094
+STATUS                            00000003
+SYNC                              00000004
+Select                            00000074
+T0CS                              00000005
+T0IE                              00000005
+T0IF                              00000002
+T0SE                              00000004
+T1CKPS0                           00000004
+T1CKPS1                           00000005
+T1CON                             00000010
+T1INSYNC                          00000002
+T1OSCEN                           00000003
+T1SYNC                            00000002
+T2CKPS0                           00000000
+T2CKPS1                           00000001
+T2CON                             00000012
+TIMEOUT_2_SECONDS                 00000028
+TMR0                              00000001
+TMR0IE                            00000005
+TMR0IF                            00000002
+TMR1CS                            00000001
+TMR1H                             0000000F
+TMR1IE                            00000000
+TMR1IF                            00000000
+TMR1L                             0000000E
+TMR1ON                            00000000
+TMR2                              00000011
+TMR2IE                            00000001
+TMR2IF                            00000001
+TMR2ON                            00000002
+TOUTPS0                           00000003
+TOUTPS1                           00000004
+TOUTPS2                           00000005
+TOUTPS3                           00000006
+TRISA                             00000085
+TRISA0                            00000000
+TRISA1                            00000001
+TRISA2                            00000002
+TRISA3                            00000003
+MPASM  5.43                       PROJECT.ASM   7-6-2025  21:11:22         PAGE 64
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+TRISA4                            00000004
+TRISA5                            00000005
+TRISB                             00000086
+TRISB0                            00000000
+TRISB1                            00000001
+TRISB2                            00000002
+TRISB3                            00000003
+TRISB4                            00000004
+TRISB5                            00000005
+TRISB6                            00000006
+TRISB7                            00000007
+TRISC                             00000087
+TRISC0                            00000000
+TRISC1                            00000001
+TRISC2                            00000002
+TRISC3                            00000003
+TRISC4                            00000004
+TRISC5                            00000005
+TRISC6                            00000006
+TRISC7                            00000007
+TRISD                             00000088
+TRISD0                            00000000
+TRISD1                            00000001
+TRISD2                            00000002
+TRISD3                            00000003
+TRISD4                            00000004
+TRISD5                            00000005
+TRISD6                            00000006
+TRISD7                            00000007
+TRISE                             00000089
+TRISE0                            00000000
+TRISE1                            00000001
+TRISE2                            00000002
+TRMT                              00000001
+TX8_9                             00000006
+TX9                               00000006
+TX9D                              00000000
+TXD8                              00000000
+TXEN                              00000005
+TXIE                              00000004
+TXIF                              00000004
+TXREG                             00000019
+TXSTA                             00000098
+Timer1                            00000070
+TimerX                            00000071
+UA                                00000001
+Var                               00000072
+W                                 00000000
+WCOL                              00000007
+WR                                00000001
+WREN                              00000002
+WRERR                             00000003
+Z                                 00000002
+MPASM  5.43                       PROJECT.ASM   7-6-2025  21:11:22         PAGE 65
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+_.org_1_04BF                      000004BF
+_BODEN_OFF                        00003FBF
+_BODEN_ON                         00003FFF
+_BOREN_OFF                        00003FBF
+_BOREN_ON                         00003FFF
+_CONFIG                           00002007
+_CPD_OFF                          00003FFF
+_CPD_ON                           00003EFF
+_CP_ALL                           00001FFF
+_CP_OFF                           00003FFF
+_CP_ON                            00001FFF
+_DEBUG_OFF                        00003FFF
+_DEBUG_ON                         000037FF
+_DEVID1                           00002006
+_FOSC_EXTRC                       00003FFF
+_FOSC_HS                          00003FFE
+_FOSC_LP                          00003FFC
+_FOSC_XT                          00003FFD
+_HS_OSC                           00003FFE
+_IDLOC0                           00002000
+_IDLOC1                           00002001
+_IDLOC2                           00002002
+_IDLOC3                           00002003
+_LP_OSC                           00003FFC
+_LVP_OFF                          00003F7F
+_LVP_ON                           00003FFF
+_PWRTE_OFF                        00003FFF
+_PWRTE_ON                         00003FF7
+_RC_OSC                           00003FFF
+_WDTE_OFF                         00003FFB
+_WDTE_ON                          00003FFF
+_WDT_OFF                          00003FFB
+_WDT_ON                           00003FFF
+_WRT_1FOURTH                      00003BFF
+_WRT_256                          00003DFF
+_WRT_HALF                         000039FF
+_WRT_OFF                          00003FFF
+_XT_OSC                           00003FFD
+__16F877A                         00000001
+__DEBUG                           1
+adjust_display_index_1            0000044C
+adjust_display_index_2            00000462
+adjust_index_1                    00000425
+adjust_index_2                    00000437
+advance_frac_simple               000000F5
+advance_int_simple                000000E6
+blink_counter                     00000021
+blink_loop                        00000066
+button_first_press                0000004B
+button_interrupt                  000000C0
+calculation_done                  00000051
+check_main_timeout                000000B3
+click_count                       00000057
+MPASM  5.43                       PROJECT.ASM   7-6-2025  21:11:22         PAGE 66
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+click_timer                       00000056
+current_digit_value               00000023
+current_part                      00000058
+cycle_result_display              000001FA
+debounce                          0000046D
+delay_1ms                         0000047B
+delay_20ms                        00000475
+delay_500ms                       00000470
+delay_5ms                         00000478
+delay_ms                          0000047E
+delay_ms_count                    00000020
+digit_array1_0                    00000025
+digit_array1_1                    00000026
+digit_array1_10                   0000002F
+digit_array1_11                   00000030
+digit_array1_2                    00000027
+digit_array1_3                    00000028
+digit_array1_4                    00000029
+digit_array1_5                    0000002A
+digit_array1_6                    0000002B
+digit_array1_7                    0000002C
+digit_array1_8                    0000002D
+digit_array1_9                    0000002E
+digit_array2_0                    00000031
+digit_array2_1                    00000032
+digit_array2_10                   0000003B
+digit_array2_11                   0000003C
+digit_array2_2                    00000033
+digit_array2_3                    00000034
+digit_array2_4                    00000035
+digit_array2_5                    00000036
+digit_array2_6                    00000037
+digit_array2_7                    00000038
+digit_array2_8                    00000039
+digit_array2_9                    0000003A
+digit_cursor_pos                  00000024
+digit_index                       00000052
+display_all_digits_1              0000038C
+display_all_digits_2              000003B3
+display_digit_1                   00000450
+display_digit_2                   00000466
+display_first_number_on_result    000001FD
+display_result_again              000001FB
+display_result_received           000002C3
+display_result_screen             000003DA
+display_second_number_on_result   0000023C
+do_cursor_advance_only            000000E3
+do_prop_num1                      000000D3
+do_propagation_for_double_click   000000D9
+do_propagation_only               000000C9
+double_click_screen1              00000290
+get_digit_value_num1              00000104
+get_digit_value_num2              00000115
+MPASM  5.43                       PROJECT.ASM   7-6-2025  21:11:22         PAGE 67
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+get_frac_digit_1                  0000010E
+get_frac_digit_2                  0000011F
+handle_button_click               00000164
+handle_double_click               00000285
+handle_equals_screen_click        000001F8
+handle_result_display_cycling     00000177
+handle_result_mode                0000007F
+handle_single_click               0000027B
+handle_single_result_click        00000186
+increment_current_digit_1         0000041D
+increment_current_digit_2         0000042F
+increment_digit_1                 00000429
+increment_digit_2                 0000043B
+inid                              000004E1
+init_master_usart                 00000486
+isr_exit                          000000C7
+just_show_second_num              000004A0
+lcd_cmd                           000002F3
+lcd_data                          000002F0
+loop1                             000004C6
+loopX                             000004CB
+main_loop                         0000007A
+main_loop_continue                0000007E
+move_to_equals_screen             000002AD
+move_to_fractional_part1          00000293
+move_to_fractional_part2          000002A7
+move_to_number2                   00000299
+ms_loop                           0000047F
+next_pos_1                        00000143
+next_pos_2                        00000162
+number2_transmitted               0000004F
+number_transmitted                0000004E
+onems                             000004C4
+position_cursor                   00000419
+print_welcome                     000002F6
+prop_double_click_num1            000000E0
+prop_frac_1                       0000013B
+prop_frac_2                       0000015A
+prop_loop_1                       00000129
+prop_loop_2                       00000148
+propagate_remaining_num1          00000126
+propagate_remaining_num2          00000145
+propagation_index                 0000005B
+propagation_value                 0000005A
+pulseE                            000004CF
+pushButton                        00000000
+readResult                        00000095
+received_digit                    00000053
+restart_calculator_process        00000198
+restart_main_timeout              000002BD
+resultDone                        00000049
+result_array_0                    0000003D
+result_array_1                    0000003E
+MPASM  5.43                       PROJECT.ASM   7-6-2025  21:11:22         PAGE 68
+
+
+SYMBOL TABLE
+  LABEL                             VALUE 
+
+result_array_10                   00000047
+result_array_11                   00000048
+result_array_2                    0000003F
+result_array_3                    00000040
+result_array_4                    00000041
+result_array_5                    00000042
+result_array_6                    00000043
+result_array_7                    00000044
+result_array_8                    00000045
+result_array_9                    00000046
+result_display_state              0000005C
+result_displayed_once             0000005D
+result_received                   00000050
+screen1                           0000004C
+send                              000004D3
+show_equals_screen                00000383
+show_the_first_num                0000031F
+show_the_first_num_fractional     0000033C
+show_the_second_num               00000357
+show_the_second_num_and_transmit  00000499
+show_the_second_num_fractional    0000037A
+showing_equals_screen             00000059
+single_click_screen1              00000282
+skip_decimal_1                    00000142
+skip_decimal_2                    00000161
+skip_second_transmission          000002B4
+skip_transmission                 000002A0
+start                             00000005
+start_calculation_process         000002B8
+start_timeout                     000002B9
+stay_at_frac_end_simple           000000FE
+stay_at_int_end_simple            000000EF
+stop_main_timeout                 000002C1
+temp_char                         00000022
+timeout_active                    00000055
+timeout_counter                   00000054
+timer1_enabled                    0000004A
+timer1_interrupt                  000000A4
+transmit_first_number_to_slave    000004A2
+transmit_index                    0000004D
+transmit_loop                     000004A3
+transmit_loop_2                   000004B0
+transmit_second_number_to_slave   000004AF
+update_single_digit_display_1     00000441
+update_single_digit_display_2     00000457
+us_loop                           00000481
+usart_send_byte                   000004BC
+xms                               000004CA
+
+Errors   :     0
+Warnings :  1177 reported,     0 suppressed
+Messages :    20 reported,     0 suppressed
+
+

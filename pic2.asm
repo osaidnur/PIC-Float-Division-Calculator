@@ -1,14 +1,16 @@
+;;
 PROCESSOR 16F877A
 __CONFIG 0x3731
 INCLUDE "P16F877A.INC"
 
-; --- SLAVE PIC VARIABLES ---
+; --- VARIABLES ---
     CBLOCK 0x20
         temp_char
-        received_digit      ; Single digit received from master
-        digit_index         ; Index for storing received digits (0-11)
-        number_count        ; Track which number we're receiving (0=first, 1=second)
-        ; Array to store the first received 12-digit number
+        received_digit
+        digit_index
+        number_count
+
+        ; Array to store the first received 12-digit number (Dividend)
         slave_digit_array1_0
         slave_digit_array1_1
         slave_digit_array1_2
@@ -21,7 +23,8 @@ INCLUDE "P16F877A.INC"
         slave_digit_array1_9
         slave_digit_array1_10
         slave_digit_array1_11
-        ; Array to store the second received 12-digit number
+
+        ; Array to store the second received 12-digit number (Divisor)
         slave_digit_array2_0
         slave_digit_array2_1
         slave_digit_array2_2
@@ -34,10 +37,72 @@ INCLUDE "P16F877A.INC"
         slave_digit_array2_9
         slave_digit_array2_10
         slave_digit_array2_11
+
         ; Status flags
-        first_number_received   ; Flag: 1 = first number completely received
-        second_number_received  ; Flag: 1 = second number completely received
-        both_numbers_ready      ; Flag: 1 = both numbers received and ready
+        first_number_received
+        second_number_received
+        both_numbers_ready
+
+        ; *** BEGIN: VARIABLES FROM DIVISION LOGIC ***
+        ; Scaled Dividend: 18 digits to hold the 12-digit input shifted left by 6 places.
+        div_dividend_d17
+        div_dividend_d16
+        div_dividend_d15
+        div_dividend_d14
+        div_dividend_d13
+        div_dividend_d12
+        div_dividend_d11
+        div_dividend_d10
+        div_dividend_d9
+        div_dividend_d8
+        div_dividend_d7
+        div_dividend_d6
+        div_dividend_d5
+        div_dividend_d4
+        div_dividend_d3
+        div_dividend_d2
+        div_dividend_d1
+        div_dividend_d0
+
+        ; Working dividend (remainder during division) - EXPANDED TO 13 DIGITS FOR PRECISION
+        div_working_d12
+        div_working_d11
+        div_working_d10
+        div_working_d9
+        div_working_d8
+        div_working_d7
+        div_working_d6
+        div_working_d5
+        div_working_d4
+        div_working_d3
+        div_working_d2
+        div_working_d1
+        div_working_d0
+
+        ; Quotient result: Stores the final 12-digit (6.6) fixed-point number.
+        div_quotient_d11
+        div_quotient_d10
+        div_quotient_d9
+        div_quotient_d8
+        div_quotient_d7
+        div_quotient_d6
+        div_quotient_d5
+        div_quotient_d4
+        div_quotient_d3
+        div_quotient_d2
+        div_quotient_d1
+        div_quotient_d0
+
+        ; Temporary variables for division
+        div_compare_result
+        div_digit_index
+        div_dividend_ptr
+        div_quotient_ptr
+        div_current_quotient_digit
+        transmit_index
+        delay_ms_count
+        ; *** END: VARIABLES FROM DIVISION LOGIC ***
+
     ENDC
 
     ORG 0x00            ; Reset vector
@@ -50,155 +115,128 @@ INCLUDE "P16F877A.INC"
 slave_start:
     NOP                 ; Required for ICD mode
 
-    ; Configure LCD pins (same as master)
-    BANKSEL TRISD
-    MOVLW   B'00000000' ; All PORTD pins as output for LCD
-    MOVWF   TRISD
 
     ; Configure USART pins
     BANKSEL TRISC
     BSF     TRISC, 7    ; RC7/RX pin as input (receive)
     BCF     TRISC, 6    ; RC6/TX pin as output (transmit)
 
-    ; Initialize USART for communication
-    ; USART = Universal Synchronous Asynchronous Receiver Transmitter
-    ; It's a hardware module that handles serial communication automatically
+    ; Initialize hardware and variables
     CALL    init_usart
-
-    ; Initialize LCD display
     BANKSEL PORTD
-    CLRF    PORTD       ; Clear LCD port
-    CALL    inid        ; Initialize LCD (from LCDIS.INC)
-
-    ; Initialize variables
+    CLRF    PORTD
     CALL    init_slave_variables
 
-    ; Display initial message
-    CALL    display_slave_ready
 
     ; Enable interrupts for USART reception
-    ; When data arrives at RX pin, an interrupt will occur automatically
     BANKSEL INTCON
     BSF     INTCON, PEIE    ; Enable peripheral interrupts
     BSF     INTCON, GIE     ; Enable global interrupts
 
+; --- MODIFIED MAIN LOOP ---
 slave_main_loop:
-    ; Main loop - slave waits for data from master
-    ; All work is done in the interrupt service routine
+    ; Check if both numbers have been received and are ready for calculation
+    BANKSEL both_numbers_ready
+    BTFSC   both_numbers_ready, 0   ; Test the flag bit
+    CALL    perform_division        ; If set, perform the division
+
+    ; Loop back to continue checking
     GOTO    slave_main_loop
+
+; --- HIGH-LEVEL CALCULATION ROUTINE ---
+perform_division:
+    ; This routine prepares the numbers and calls the core division logic.
+
+    ; 1. Clear the 'ready' flag to prevent re-calculation
+    BANKSEL both_numbers_ready
+    CLRF    both_numbers_ready
+
+    ; 2. Prepare the numbers for the 18x12 division algorithm.
+    CALL    prepare_division_inputs
+
+    ; 3. Call the core division logic that was integrated from the external file.
+    CALL    perform_18x12_division
+
+
+    BANKSEL div_quotient_d11
+    CALL    transmit_result_to_master
+
+    ; 4. Reset state variables for next calculation
+    CALL    reset_slave_for_next_calculation
+
+    ; 5. Calculation is done. The routine returns to the main loop to wait.
+    RETURN
 
 ;----------------------------------------USART INTERRUPT SERVICE ROUTINE-------------------------------------------------------------
 USART_ISR:
-    ; This routine runs automatically when USART receives data
-    ; Save context
     MOVWF   temp_char
-
-    ; Check if this is a USART receive interrupt
     BANKSEL PIR1
-    BTFSS   PIR1, RCIF      ; Check if receive interrupt flag is set
-    GOTO    isr_exit        ; Not our interrupt, exit
-
-    ; Read the received byte from USART buffer
-    ; RCREG = Receive Register, contains the byte sent by master
+    BTFSS   PIR1, RCIF
+    GOTO    isr_exit
     BANKSEL RCREG
-    MOVF    RCREG, 0        ; Read received data into W register
-    MOVWF   received_digit  ; Store received digit
-
-    ; Store the digit in the appropriate array based on number_count
+    MOVF    RCREG, 0
+    MOVWF   received_digit
     MOVF    number_count, 0
-    SUBLW   .0              ; Check if receiving first number
-    BTFSC   STATUS, Z       ; If zero, we're receiving first number
+    SUBLW   .0
+    BTFSC   STATUS, Z
     GOTO    store_first_number
-    ; Otherwise, store in second number array
     GOTO    store_second_number
-
 store_first_number:
-    ; Store digit in first number array
     MOVF    digit_index, 0
-    ADDLW   slave_digit_array1_0  ; Calculate address in first array
-    MOVWF   FSR                   ; Point FSR to storage location
-    MOVF    received_digit, 0     ; Get the received digit
-    MOVWF   INDF                  ; Store digit in array
-    
-    ; Increment digit index
+    ADDLW   slave_digit_array1_0
+    MOVWF   FSR
+    MOVF    received_digit, 0
+    MOVWF   INDF
     INCF    digit_index, 1
-    
-    ; Check if we received all 12 digits of first number
     MOVF    digit_index, 0
-    SUBLW   .12                   ; Compare with 12
-    BTFSS   STATUS, Z             ; If not equal to 12, continue receiving
-    GOTO    isr_exit              ; Still receiving first number
-    
-    ; First number complete
+    SUBLW   .12
+    BTFSS   STATUS, Z
+    GOTO    isr_exit
     MOVLW   .1
     MOVWF   first_number_received
-    CLRF    digit_index           ; Reset index for second number
-    INCF    number_count, 1       ; Switch to receiving second number
-    CALL    display_first_number_received
+    CLRF    digit_index
+    INCF    number_count, 1
     GOTO    isr_exit
-
 store_second_number:
-    ; Store digit in second number array
     MOVF    digit_index, 0
-    ADDLW   slave_digit_array2_0  ; Calculate address in second array
-    MOVWF   FSR                   ; Point FSR to storage location
-    MOVF    received_digit, 0     ; Get the received digit
-    MOVWF   INDF                  ; Store digit in array
-    
-    ; Increment digit index
+    ADDLW   slave_digit_array2_0
+    MOVWF   FSR
+    MOVF    received_digit, 0
+    MOVWF   INDF
     INCF    digit_index, 1
-    
-    ; Check if we received all 12 digits of second number
     MOVF    digit_index, 0
-    SUBLW   .12                   ; Compare with 12
-    BTFSS   STATUS, Z             ; If not equal to 12, continue receiving
-    GOTO    isr_exit              ; Still receiving second number
-    
-    ; Second number complete
+    SUBLW   .12
+    BTFSS   STATUS, Z
+    GOTO    isr_exit
     MOVLW   .1
     MOVWF   second_number_received
     MOVLW   .1
-    MOVWF   both_numbers_ready    ; Both numbers now available
-    CALL    display_both_numbers_received
-
+    MOVWF   both_numbers_ready
 isr_exit:
-    ; Restore context and return from interrupt
     MOVF    temp_char, 0
     RETFIE
 
 ;----------------------------------------SUBROUTINES-------------------------------------------------------------
 
 init_usart:
-    ; Configure USART for 9600 baud rate communication
-    ; Baud rate = speed of data transmission (bits per second)
-    ; 9600 baud = 9600 bits per second (common speed for PIC communication)
-    
     BANKSEL SPBRG
-    MOVLW   .25             ; Baud rate generator value for 9600 baud at 4MHz
-    MOVWF   SPBRG           ; Set baud rate
-    
+    MOVLW   .25
+    MOVWF   SPBRG
     BANKSEL TXSTA
-    BCF     TXSTA, SYNC     ; Asynchronous mode (no clock signal needed)
-    BSF     TXSTA, TXEN     ; Enable transmitter (in case we need to send back)
-    
+    BCF     TXSTA, SYNC
+    BSF     TXSTA, TXEN
     BANKSEL RCSTA
-    BSF     RCSTA, SPEN     ; Enable serial port
-    BSF     RCSTA, CREN     ; Enable continuous receive
-    
-    ; Enable USART receive interrupt
+    BSF     RCSTA, SPEN
+    BSF     RCSTA, CREN
     BANKSEL PIE1
-    BSF     PIE1, RCIE      ; Enable receive interrupt
+    BSF     PIE1, RCIE
     BANKSEL PIR1
-    BCF     PIR1, RCIF      ; Clear receive interrupt flag
-    
+    BCF     PIR1, RCIF
     RETURN
 
 init_slave_variables:
-    ; Initialize all digit storage variables and control flags to 0
     CLRF    digit_index
     CLRF    number_count
-    
-    ; Clear first number array
     CLRF    slave_digit_array1_0
     CLRF    slave_digit_array1_1
     CLRF    slave_digit_array1_2
@@ -211,8 +249,6 @@ init_slave_variables:
     CLRF    slave_digit_array1_9
     CLRF    slave_digit_array1_10
     CLRF    slave_digit_array1_11
-    
-    ; Clear second number array
     CLRF    slave_digit_array2_0
     CLRF    slave_digit_array2_1
     CLRF    slave_digit_array2_2
@@ -225,292 +261,470 @@ init_slave_variables:
     CLRF    slave_digit_array2_9
     CLRF    slave_digit_array2_10
     CLRF    slave_digit_array2_11
-    
-    ; Clear status flags
+    CLRF    first_number_received
+    CLRF    second_number_received
+    CLRF    both_numbers_ready
+    CLRF    transmit_index
+    RETURN
+
+
+transmit_result_to_master:
+    CLRF transmit_index
+transmit_loop:
+    MOVF transmit_index, 0
+    ADDLW  div_quotient_d11
+
+    MOVWF FSR
+    MOVF INDF, 0
+    CALL usart_send_byte       ; <---- UART transmit here
+    CALL delay_5ms
+    INCF transmit_index, 1
+    MOVF transmit_index, 0
+    SUBLW .12
+    BTFSS STATUS, Z
+    GOTO transmit_loop
+    RETURN
+
+
+
+
+
+
+
+usart_send_byte:
+BANKSEL TXSTA
+BTFSS TXSTA, TRMT
+GOTO $-1
+BANKSEL TXREG
+MOVWF TXREG
+RETURN
+
+
+
+
+prepare_division_inputs:
+    MOVF    slave_digit_array1_0, W
+    MOVWF   div_dividend_d17
+    MOVF    slave_digit_array1_1, W
+    MOVWF   div_dividend_d16
+    MOVF    slave_digit_array1_2,  W
+    MOVWF   div_dividend_d15
+    MOVF    slave_digit_array1_3,  W
+    MOVWF   div_dividend_d14
+    MOVF    slave_digit_array1_4,  W
+    MOVWF   div_dividend_d13
+    MOVF    slave_digit_array1_5,  W
+    MOVWF   div_dividend_d12
+    MOVF    slave_digit_array1_6,  W
+    MOVWF   div_dividend_d11
+    MOVF    slave_digit_array1_7,  W
+    MOVWF   div_dividend_d10
+    MOVF    slave_digit_array1_8,  W
+    MOVWF   div_dividend_d9
+    MOVF    slave_digit_array1_9,  W
+    MOVWF   div_dividend_d8
+    MOVF    slave_digit_array1_10,  W
+    MOVWF   div_dividend_d7
+    MOVF    slave_digit_array1_11,  W
+    MOVWF   div_dividend_d6
+    ; Clear the lower 6 digits for scaling
+    CLRF    div_dividend_d5
+    CLRF    div_dividend_d4
+    CLRF    div_dividend_d3
+    CLRF    div_dividend_d2
+    CLRF    div_dividend_d1
+    CLRF    div_dividend_d0
+    ; 2. Clear quotient to ensure a clean start
+    CLRF    div_quotient_d11
+    CLRF    div_quotient_d10
+    CLRF    div_quotient_d9
+    CLRF    div_quotient_d8
+    CLRF    div_quotient_d7
+    CLRF    div_quotient_d6
+    CLRF    div_quotient_d5
+    CLRF    div_quotient_d4
+    CLRF    div_quotient_d3
+    CLRF    div_quotient_d2
+    CLRF    div_quotient_d1
+    CLRF    div_quotient_d0
+    RETURN
+
+perform_18x12_division:
+    ; Clear working remainder (13 digits)
+    CLRF    div_working_d12
+    CLRF    div_working_d11
+    CLRF    div_working_d10
+    CLRF    div_working_d9
+    CLRF    div_working_d8
+    CLRF    div_working_d7
+    CLRF    div_working_d6
+    CLRF    div_working_d5
+    CLRF    div_working_d4
+    CLRF    div_working_d3
+    CLRF    div_working_d2
+    CLRF    div_working_d1
+    CLRF    div_working_d0
+    ; Initialize digit counter for 18-digit dividend
+    MOVLW   .18
+    MOVWF   div_digit_index
+    ; Point to most significant digits
+    MOVLW   div_dividend_d17
+    MOVWF   div_dividend_ptr
+    MOVLW   div_quotient_d11
+    MOVWF   div_quotient_ptr
+digit_loop:
+    ; Shift working remainder left
+    MOVF    div_working_d11, W
+    MOVWF   div_working_d12
+    MOVF    div_working_d10, W
+    MOVWF   div_working_d11
+    MOVF    div_working_d9,  W
+    MOVWF   div_working_d10
+    MOVF    div_working_d8,  W
+    MOVWF   div_working_d9
+    MOVF    div_working_d7,  W
+    MOVWF   div_working_d8
+    MOVF    div_working_d6,  W
+    MOVWF   div_working_d7
+    MOVF    div_working_d5,  W
+    MOVWF   div_working_d6
+    MOVF    div_working_d4,  W
+    MOVWF   div_working_d5
+    MOVF    div_working_d3,  W
+    MOVWF   div_working_d4
+    MOVF    div_working_d2,  W
+    MOVWF   div_working_d3
+    MOVF    div_working_d1,  W
+    MOVWF   div_working_d2
+    MOVF    div_working_d0,  W
+    MOVWF   div_working_d1
+    ; Bring down next digit from dividend
+    MOVF    div_dividend_ptr, W
+    MOVWF   FSR
+    MOVF    INDF, W
+    MOVWF   div_working_d0
+    INCF    div_dividend_ptr, F
+    ; Reset current quotient digit
+    CLRF    div_current_quotient_digit
+subtract_loop:
+    CALL    compare_13x12_numbers
+    BTFSS   div_compare_result, 0
+    GOTO    end_subtract_loop
+    CALL    subtract_13x12_numbers
+    INCF    div_current_quotient_digit, F
+    GOTO    subtract_loop
+end_subtract_loop:
+    MOVLW   .13
+    SUBWF   div_digit_index, W
+    BTFSC   STATUS, C
+    GOTO    skip_store
+    ; Store the result digit
+    MOVF    div_quotient_ptr, W
+    MOVWF   FSR
+    MOVF    div_current_quotient_digit, W
+    MOVWF   INDF
+    INCF    div_quotient_ptr, F
+skip_store:
+    DECFSZ  div_digit_index, F
+    GOTO    digit_loop
+    RETURN
+
+compare_13x12_numbers:
+    CLRF    div_compare_result
+    MOVF    div_working_d12, W
+    BTFSC   STATUS, Z
+    GOTO    compare_lower_12
+    BSF     div_compare_result, 0
+    RETURN
+compare_lower_12:
+    MOVF    slave_digit_array2_0, W
+    SUBWF   div_working_d11, W
+    BTFSS   STATUS, Z
+    GOTO    check_comp_res
+    MOVF    slave_digit_array2_1, W
+    SUBWF   div_working_d10, W
+    BTFSS   STATUS, Z
+    GOTO    check_comp_res
+    MOVF    slave_digit_array2_2, W
+    SUBWF   div_working_d9, W
+    BTFSS   STATUS, Z
+    GOTO    check_comp_res
+    MOVF    slave_digit_array2_3, W
+    SUBWF   div_working_d8, W
+    BTFSS   STATUS, Z
+    GOTO    check_comp_res
+    MOVF    slave_digit_array2_4, W
+    SUBWF   div_working_d7, W
+    BTFSS   STATUS, Z
+    GOTO    check_comp_res
+    MOVF    slave_digit_array2_5, W
+    SUBWF   div_working_d6, W
+    BTFSS   STATUS, Z
+    GOTO    check_comp_res
+    MOVF    slave_digit_array2_6, W
+    SUBWF   div_working_d5, W
+    BTFSS   STATUS, Z
+    GOTO    check_comp_res
+    MOVF    slave_digit_array2_7, W
+    SUBWF   div_working_d4, W
+    BTFSS   STATUS, Z
+    GOTO    check_comp_res
+    MOVF    slave_digit_array2_8, W
+    SUBWF   div_working_d3, W
+    BTFSS   STATUS, Z
+    GOTO    check_comp_res
+    MOVF    slave_digit_array2_9, W
+    SUBWF   div_working_d2, W
+    BTFSS   STATUS, Z
+    GOTO    check_comp_res
+    MOVF    slave_digit_array2_10, W
+    SUBWF   div_working_d1, W
+    BTFSS   STATUS, Z
+    GOTO    check_comp_res
+    MOVF    slave_digit_array2_11, W
+    SUBWF   div_working_d0, W
+check_comp_res:
+    BTFSC   STATUS, C
+    BSF     div_compare_result, 0
+    RETURN
+
+subtract_13x12_numbers:
+    MOVF    slave_digit_array2_11, W
+    SUBWF   div_working_d0, F
+    BTFSC   STATUS, C
+    GOTO    sub_d1
+    MOVLW   .10
+    ADDWF   div_working_d0, F
+    CALL    b_f_h_d_0
+sub_d1:
+    MOVF    slave_digit_array2_10, W
+    SUBWF   div_working_d1, F
+    BTFSC   STATUS, C
+    GOTO    sub_d2
+    MOVLW   .10
+    ADDWF   div_working_d1, F
+    CALL    b_f_h_d_1
+sub_d2:
+    MOVF    slave_digit_array2_9, W
+    SUBWF   div_working_d2, F
+    BTFSC   STATUS, C
+    GOTO    sub_d3
+    MOVLW   .10
+    ADDWF   div_working_d2, F
+    CALL    b_f_h_d_2
+sub_d3:
+    MOVF    slave_digit_array2_8, W
+    SUBWF   div_working_d3, F
+    BTFSC   STATUS, C
+    GOTO    sub_d4
+    MOVLW   .10
+    ADDWF   div_working_d3, F
+    CALL    b_f_h_d_3
+sub_d4:
+    MOVF    slave_digit_array2_7, W
+    SUBWF   div_working_d4, F
+    BTFSC   STATUS, C
+    GOTO    sub_d5
+    MOVLW   .10
+    ADDWF   div_working_d4, F
+    CALL    b_f_h_d_4
+sub_d5:
+    MOVF    slave_digit_array2_6, W
+    SUBWF   div_working_d5, F
+    BTFSC   STATUS, C
+    GOTO    sub_d6
+    MOVLW   .10
+    ADDWF   div_working_d5, F
+    CALL    b_f_h_d_5
+sub_d6:
+    MOVF    slave_digit_array2_5, W
+    SUBWF   div_working_d6, F
+    BTFSC   STATUS, C
+    GOTO    sub_d7
+    MOVLW   .10
+    ADDWF   div_working_d6, F
+    CALL    b_f_h_d_6
+sub_d7:
+    MOVF    slave_digit_array2_4, W
+    SUBWF   div_working_d7, F
+    BTFSC   STATUS, C
+    GOTO    sub_d8
+    MOVLW   .10
+    ADDWF   div_working_d7, F
+    CALL    b_f_h_d_7
+sub_d8:
+    MOVF    slave_digit_array2_3, W
+    SUBWF   div_working_d8, F
+    BTFSC   STATUS, C
+    GOTO    sub_d9
+    MOVLW   .10
+    ADDWF   div_working_d8, F
+    CALL    b_f_h_d_8
+sub_d9:
+    MOVF    slave_digit_array2_2, W
+    SUBWF   div_working_d9, F
+    BTFSC   STATUS, C
+    GOTO    sub_d10
+    MOVLW   .10
+    ADDWF   div_working_d9, F
+    CALL    b_f_h_d_9
+sub_d10:
+    MOVF    slave_digit_array2_1, W
+    SUBWF   div_working_d10, F
+    BTFSC   STATUS, C
+    GOTO    sub_d11
+    MOVLW   .10
+    ADDWF   div_working_d10, F
+    CALL    b_f_h_d_10
+sub_d11:
+    MOVF    slave_digit_array2_0, W
+    SUBWF   div_working_d11, F
+    BTFSC   STATUS, C
+    RETURN
+    MOVLW   .10
+    ADDWF   div_working_d11, F
+    CALL    b_f_h_d_11
+    RETURN
+
+; *** CRITICAL FIX: Corrected Ripple-Borrow Routines (Fall-through logic) ***
+b_f_h_d_0:
+    DECF    div_working_d1, F
+    BTFSS   div_working_d1, 7
+    RETURN
+    MOVLW   .9
+    MOVWF   div_working_d1
+b_f_h_d_1:
+    DECF    div_working_d2, F
+    BTFSS   div_working_d2, 7
+    RETURN
+    MOVLW   .9
+    MOVWF   div_working_d2
+b_f_h_d_2:
+    DECF    div_working_d3, F
+    BTFSS   div_working_d3, 7
+    RETURN
+    MOVLW   .9
+    MOVWF   div_working_d3
+b_f_h_d_3:
+    DECF    div_working_d4, F
+    BTFSS   div_working_d4, 7
+    RETURN
+    MOVLW   .9
+    MOVWF   div_working_d4
+b_f_h_d_4:
+    DECF    div_working_d5, F
+    BTFSS   div_working_d5, 7
+    RETURN
+    MOVLW   .9
+    MOVWF   div_working_d5
+b_f_h_d_5:
+    DECF    div_working_d6, F
+    BTFSS   div_working_d6, 7
+    RETURN
+    MOVLW   .9
+    MOVWF   div_working_d6
+b_f_h_d_6:
+    DECF    div_working_d7, F
+    BTFSS   div_working_d7, 7
+    RETURN
+    MOVLW   .9
+    MOVWF   div_working_d7
+b_f_h_d_7:
+    DECF    div_working_d8, F
+    BTFSS   div_working_d8, 7
+    RETURN
+    MOVLW   .9
+    MOVWF   div_working_d8
+b_f_h_d_8:
+    DECF    div_working_d9, F
+    BTFSS   div_working_d9, 7
+    RETURN
+    MOVLW   .9
+    MOVWF   div_working_d9
+b_f_h_d_9:
+    DECF    div_working_d10, F
+    BTFSS   div_working_d10, 7
+    RETURN
+    MOVLW   .9
+    MOVWF   div_working_d10
+b_f_h_d_10:
+    DECF    div_working_d11, F
+    BTFSS   div_working_d11, 7
+    RETURN
+    MOVLW   .9
+    MOVWF   div_working_d11
+b_f_h_d_11:
+    DECF    div_working_d12, F
+    RETURN
+
+delay_500ms:
+movlw .250
+call delay_ms
+movlw .250
+call delay_ms
+return
+
+delay_20ms:
+movlw .20
+call delay_ms
+return
+
+delay_5ms:
+movlw .5
+call delay_ms
+return
+
+delay_1ms:
+movlw .1
+call delay_ms
+return
+
+delay_ms:
+movwf delay_ms_count
+ms_loop:
+movlw 0xC7
+movwf temp_char
+us_loop:
+decfsz temp_char, 1
+goto us_loop
+decfsz delay_ms_count, 1
+goto ms_loop
+return
+
+reset_slave_for_next_calculation:
+    ; Reset counters and flags for next calculation
+    CLRF    digit_index
+    CLRF    number_count
     CLRF    first_number_received
     CLRF    second_number_received
     CLRF    both_numbers_ready
     
+    ; Clear the received number arrays
+    CLRF    slave_digit_array1_0
+    CLRF    slave_digit_array1_1
+    CLRF    slave_digit_array1_2
+    CLRF    slave_digit_array1_3
+    CLRF    slave_digit_array1_4
+    CLRF    slave_digit_array1_5
+    CLRF    slave_digit_array1_6
+    CLRF    slave_digit_array1_7
+    CLRF    slave_digit_array1_8
+    CLRF    slave_digit_array1_9
+    CLRF    slave_digit_array1_10
+    CLRF    slave_digit_array1_11
+    CLRF    slave_digit_array2_0
+    CLRF    slave_digit_array2_1
+    CLRF    slave_digit_array2_2
+    CLRF    slave_digit_array2_3
+    CLRF    slave_digit_array2_4
+    CLRF    slave_digit_array2_5
+    CLRF    slave_digit_array2_6
+    CLRF    slave_digit_array2_7
+    CLRF    slave_digit_array2_8
+    CLRF    slave_digit_array2_9
+    CLRF    slave_digit_array2_10
+    CLRF    slave_digit_array2_11
     RETURN
 
-display_slave_ready:
-    ; Display message indicating slave is ready to receive
-    MOVLW   0x01            ; Clear display
-    CALL    lcd_cmd
-    
-    MOVLW   0x80            ; Position cursor at first line
-    CALL    lcd_cmd
-    
-    ; Display "SLAVE READY"
-    MOVLW   'S'
-    CALL    lcd_data
-    MOVLW   'L'
-    CALL    lcd_data
-    MOVLW   'A'
-    CALL    lcd_data
-    MOVLW   'V'
-    CALL    lcd_data
-    MOVLW   'E'
-    CALL    lcd_data
-    MOVLW   ' '
-    CALL    lcd_data
-    MOVLW   'R'
-    CALL    lcd_data
-    MOVLW   'E'
-    CALL    lcd_data
-    MOVLW   'A'
-    CALL    lcd_data
-    MOVLW   'D'
-    CALL    lcd_data
-    MOVLW   'Y'
-    CALL    lcd_data
-    
-    MOVLW   0xC0            ; Position cursor at second line
-    CALL    lcd_cmd
-    
-    MOVLW   'W'
-    CALL    lcd_data
-    MOVLW   'a'
-    CALL    lcd_data
-    MOVLW   'i'
-    CALL    lcd_data
-    MOVLW   't'
-    CALL    lcd_data
-    MOVLW   'i'
-    CALL    lcd_data
-    MOVLW   'n'
-    CALL    lcd_data
-    MOVLW   'g'
-    CALL    lcd_data
-    MOVLW   '.'
-    CALL    lcd_data
-    MOVLW   '.'
-    CALL    lcd_data
-    MOVLW   '.'
-    CALL    lcd_data
-    
-    RETURN
-
-display_complete_number:
-    ; Clear the display and show the received number
-    MOVLW   0x01            ; Clear display
-    CALL    lcd_cmd
-    
-    MOVLW   0x80            ; Position cursor at first line
-    CALL    lcd_cmd
-    
-    ; Display "RECEIVED:"
-    MOVLW   'R'
-    CALL    lcd_data
-    MOVLW   'E'
-    CALL    lcd_data
-    MOVLW   'C'
-    CALL    lcd_data
-    MOVLW   'E'
-    CALL    lcd_data
-    MOVLW   'I'
-    CALL    lcd_data
-    MOVLW   'V'
-    CALL    lcd_data
-    MOVLW   'E'
-    CALL    lcd_data
-    MOVLW   'D'
-    CALL    lcd_data
-    MOVLW   ':'
-    CALL    lcd_data
-    
-    MOVLW   0xC0            ; Position cursor at second line
-    CALL    lcd_cmd
-    
-    ; Display all 12 digits with decimal point after 6th digit
-    CALL    display_received_digits
-    
-    ; Reset digit index for next reception
-    CLRF    digit_index
-    
-    RETURN
-
-display_received_digits:
-    ; Display the complete number with decimal point
-    MOVF    slave_digit_array1_0, 0
-    ADDLW   '0'             ; Convert digit to ASCII
-    CALL    lcd_data
-    
-    MOVF    slave_digit_array1_1, 0
-    ADDLW   '0'
-    CALL    lcd_data
-    
-    MOVF    slave_digit_array1_2, 0
-    ADDLW   '0'
-    CALL    lcd_data
-    
-    MOVF    slave_digit_array1_3, 0
-    ADDLW   '0'
-    CALL    lcd_data
-    
-    MOVF    slave_digit_array1_4, 0
-    ADDLW   '0'
-    CALL    lcd_data
-    
-    MOVF    slave_digit_array1_5, 0
-    ADDLW   '0'
-    CALL    lcd_data
-    
-    ; Add decimal point
-    MOVLW   '.'
-    CALL    lcd_data
-    
-    MOVF    slave_digit_array1_6, 0
-    ADDLW   '0'
-    CALL    lcd_data
-    
-    MOVF    slave_digit_array1_7, 0
-    ADDLW   '0'
-    CALL    lcd_data
-    
-    MOVF    slave_digit_array1_8, 0
-    ADDLW   '0'
-    CALL    lcd_data
-    
-    MOVF    slave_digit_array1_9, 0
-    ADDLW   '0'
-    CALL    lcd_data
-    
-    MOVF    slave_digit_array1_10, 0
-    ADDLW   '0'
-    CALL    lcd_data
-    
-    MOVF    slave_digit_array1_11, 0
-    ADDLW   '0'
-    CALL    lcd_data
-    
-    RETURN
-
-display_first_number_received:
-    ; Display message when first number is completely received
-    MOVLW   0x01            ; Clear display
-    CALL    lcd_cmd
-    
-    MOVLW   0x80            ; Position cursor at first line
-    CALL    lcd_cmd
-    
-    ; Display "FIRST NUM RCV"
-    MOVLW   'F'
-    CALL    lcd_data
-    MOVLW   'I'
-    CALL    lcd_data
-    MOVLW   'R'
-    CALL    lcd_data
-    MOVLW   'S'
-    CALL    lcd_data
-    MOVLW   'T'
-    CALL    lcd_data
-    MOVLW   ' '
-    CALL    lcd_data
-    MOVLW   'N'
-    CALL    lcd_data
-    MOVLW   'U'
-    CALL    lcd_data
-    MOVLW   'M'
-    CALL    lcd_data
-    MOVLW   ' '
-    CALL    lcd_data
-    MOVLW   'R'
-    CALL    lcd_data
-    MOVLW   'C'
-    CALL    lcd_data
-    MOVLW   'V'
-    CALL    lcd_data
-    
-    RETURN
-
-display_both_numbers_received:
-    ; Display message when both numbers are completely received
-    MOVLW   0x01            ; Clear display
-    CALL    lcd_cmd
-    
-    MOVLW   0x80            ; Position cursor at first line
-    CALL    lcd_cmd
-    
-    ; Display "BOTH NUMBERS"
-    MOVLW   'B'
-    CALL    lcd_data
-    MOVLW   'O'
-    CALL    lcd_data
-    MOVLW   'T'
-    CALL    lcd_data
-    MOVLW   'H'
-    CALL    lcd_data
-    MOVLW   ' '
-    CALL    lcd_data
-    MOVLW   'N'
-    CALL    lcd_data
-    MOVLW   'U'
-    CALL    lcd_data
-    MOVLW   'M'
-    CALL    lcd_data
-    MOVLW   'B'
-    CALL    lcd_data
-    MOVLW   'E'
-    CALL    lcd_data
-    MOVLW   'R'
-    CALL    lcd_data
-    MOVLW   'S'
-    CALL    lcd_data
-    
-    MOVLW   0xC0            ; Position cursor at second line
-    CALL    lcd_cmd
-    
-    ; Display "RECEIVED!"
-    MOVLW   'R'
-    CALL    lcd_data
-    MOVLW   'E'
-    CALL    lcd_data
-    MOVLW   'C'
-    CALL    lcd_data
-    MOVLW   'E'
-    CALL    lcd_data
-    MOVLW   'I'
-    CALL    lcd_data
-    MOVLW   'V'
-    CALL    lcd_data
-    MOVLW   'E'
-    CALL    lcd_data
-    MOVLW   'D'
-    CALL    lcd_data
-    MOVLW   '!'
-    CALL    lcd_data
-    
-    RETURN
-
-;----------------------------------------LCD SUBROUTINES (using LCDIS.INC functions)-------------------------------------------------------------
-lcd_data:
-    BSF     Select, RS      ; RS = 1 for data (using Select variable from LCDIS.INC)
-    CALL    send            ; Use send function from LCDIS.INC
-    RETURN
-
-lcd_cmd:
-    BCF     Select, RS      ; RS = 0 for command (using Select variable from LCDIS.INC)
-    CALL    send            ; Use send function from LCDIS.INC
-    RETURN
-
-; Utility functions to access stored numbers
-get_first_number_digit:
-    ; Input: W register contains digit index (0-11)
-    ; Output: W register contains digit value
-    ADDLW   slave_digit_array1_0  ; Calculate address
-    MOVWF   FSR                   ; Point FSR to digit
-    MOVF    INDF, 0               ; Get digit value into W
-    RETURN
-
-get_second_number_digit:
-    ; Input: W register contains digit index (0-11)  
-    ; Output: W register contains digit value
-    ADDLW   slave_digit_array2_0  ; Calculate address
-    MOVWF   FSR                   ; Point FSR to digit
-    MOVF    INDF, 0               ; Get digit value into W
-    RETURN
-
-INCLUDE "LCDIS.INC"
 
 END

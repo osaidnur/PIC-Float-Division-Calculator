@@ -45,6 +45,7 @@ result_array_8
 result_array_9
 result_array_10
 result_array_11
+resultDone
 timer1_enabled
 button_first_press
 screen1
@@ -53,6 +54,8 @@ number_transmitted
 number2_transmitted
 result_received
 calculation_done
+digit_index
+received_digit
 ; TIMEOUT VARIABLES
 timeout_counter
 timeout_active
@@ -66,6 +69,9 @@ showing_equals_screen
 ; NEW FEATURE: PROPAGATION VARIABLES
 propagation_value
 propagation_index
+; RESULT DISPLAY CYCLING
+result_display_state ; 0 = result, 1 = first number, 2 = second number
+result_displayed_once ; Flag to prevent repeated display calls in main loop
 ENDC
 
 pushButton EQU 0    ; Button on RB0
@@ -169,6 +175,7 @@ clrf result_array_8
 clrf result_array_9
 clrf result_array_10
 clrf result_array_11
+clrf resultDone
 clrf current_digit_value
 clrf timer1_enabled
 clrf button_first_press
@@ -178,6 +185,7 @@ clrf number_transmitted
 clrf number2_transmitted
 clrf result_received
 clrf calculation_done
+clrf digit_index
 movlw TIMEOUT_2_SECONDS
 movwf timeout_counter
 clrf timeout_active
@@ -188,6 +196,9 @@ clrf showing_equals_screen
 ; Initialize propagation variables
 clrf propagation_value
 clrf propagation_index
+; Initialize result display cycling
+clrf result_display_state
+clrf result_displayed_once
 
 ; Initialize LCD
 CALL inid
@@ -231,11 +242,21 @@ main_loop:
 ; Check if showing equals screen
 btfsc showing_equals_screen, 0
 goto main_loop_continue
-; Check if calculation is done and display result
+; Check if calculation is done and display result (only once)
 btfsc calculation_done, 0
-call display_result_screen
+goto handle_result_mode
 main_loop_continue:
 goto main_loop
+
+handle_result_mode:
+; Check if we've already displayed the result
+btfsc result_displayed_once, 0
+goto main_loop_continue
+; Display result for the first time
+call display_result_screen
+; Mark that we've displayed the result
+bsf result_displayed_once, 0
+goto main_loop_continue
 
 ;----------------------------------------INTERRUPT SERVICE ROUTINE-------------------------------------------------------------
 ISR_handler:
@@ -251,7 +272,34 @@ BANKSEL INTCON
 btfsc INTCON, INTF
 goto button_interrupt
 
+
+BTFSS   PIR1, RCIF         ; Check if the USART received a byte
+GOTO    isr_exit           ; If not, exit interrupt, if yes, read the value
+BANKSEL RCREG
+MOVF    RCREG, 0           ; Read received byte from UART
+MOVWF   received_digit     ; Store it in 'received_digit'
+goto readResult
+
 goto isr_exit
+
+readResult:
+MOVF    digit_index, 0
+ADDLW   result_array_0
+MOVWF   FSR
+MOVF    received_digit, 0
+MOVWF   INDF
+INCF    digit_index, 1
+MOVF    digit_index, 0
+SUBLW   .12
+BTFSS   STATUS, Z
+GOTO    isr_exit
+MOVLW   .1
+MOVWF   calculation_done
+; Clear equals screen flag since we're now showing result
+bcf     showing_equals_screen, 0
+CLRF    digit_index
+; Let main loop handle display - don't call display functions from ISR
+GOTO    isr_exit
 
 timer1_interrupt:
 ; Clear Timer1 interrupt flag
@@ -565,7 +613,11 @@ goto prop_loop_2
 
 ;----------------------------------------BUTTON HANDLING-------------------------------------------------------------
 handle_button_click:
-; Check if we're showing equals screen
+; Check if calculation is done - handle result display cycling
+btfsc calculation_done, 0
+goto handle_result_display_cycling
+
+; Check if we're showing equals screen (before calculation)
 btfsc showing_equals_screen, 0
 goto handle_equals_screen_click
 
@@ -598,9 +650,328 @@ clrf click_timer
 ; Process as single click
 goto handle_single_click
 
+handle_result_display_cycling:
+; Reset main timeout when any button press occurs
+call restart_main_timeout
+
+; Increment click count
+incf click_count, 1
+
+; Start/restart click timer for double-click window
+movlw DOUBLE_CLICK_TIMEOUT
+movwf click_timer
+
+; Check for double-click to restart the process
+movf click_count, 0
+sublw .2
+btfsc STATUS, Z
+goto restart_calculator_process
+
+; Single click - cycle through display states: 0=result, 1=first number, 2=second number
+movf click_count, 0
+sublw .1
+btfsc STATUS, Z
+goto handle_single_result_click
+
+; More than 2 clicks - reset and treat as single click
+clrf click_count
+clrf click_timer
+goto handle_single_result_click
+
+handle_single_result_click:
+incf result_display_state, 1
+movf result_display_state, 0
+sublw .3
+btfsc STATUS, Z
+clrf result_display_state
+
+; Display based on current state
+movf result_display_state, 0
+sublw .0
+btfsc STATUS, Z
+goto display_result_again
+
+movf result_display_state, 0
+sublw .1
+btfsc STATUS, Z
+goto display_first_number_on_result
+
+movf result_display_state, 0
+sublw .2
+btfsc STATUS, Z
+goto display_second_number_on_result
+
+return
+
+restart_calculator_process:
+; Reset all system variables to initial state
+NOP
+
+; Configure I/O ports
+BANKSEL TRISD
+MOVLW B'00000000'
+MOVWF TRISD 
+MOVLW B'00000001'
+MOVWF TRISB
+
+; Configure USART pins
+BANKSEL TRISC
+BCF TRISC, 6
+BSF TRISC, 7
+
+; Configure interrupt
+BANKSEL OPTION_REG
+BCF OPTION_REG, INTEDG
+
+; Configure Timer1 for 10ms interrupts
+BANKSEL T1CON
+MOVLW B'00110001'
+MOVWF T1CON
+
+; Set Timer1 initial value for 10ms overflow
+BANKSEL TMR1H
+MOVLW 0xEC
+MOVWF TMR1H
+MOVLW 0x78
+MOVWF TMR1L
+
+; Configure Timer1 interrupt
+BANKSEL PIE1
+BSF PIE1, TMR1IE
+BANKSEL PIR1
+BCF PIR1, TMR1IF
+
+; Initialize USART
+CALL init_master_usart
+
+; Return to bank 0
+BANKSEL PORTD
+CLRF PORTD
+
+; Initialize all variables
+clrf digit_cursor_pos
+clrf current_part
+clrf digit_array1_0
+clrf digit_array1_1
+clrf digit_array1_2
+clrf digit_array1_3
+clrf digit_array1_4
+clrf digit_array1_5
+clrf digit_array1_6
+clrf digit_array1_7
+clrf digit_array1_8
+clrf digit_array1_9
+clrf digit_array1_10
+clrf digit_array1_11
+clrf digit_array2_0
+clrf digit_array2_1
+clrf digit_array2_2
+clrf digit_array2_3
+clrf digit_array2_4
+clrf digit_array2_5
+clrf digit_array2_6
+clrf digit_array2_7
+clrf digit_array2_8
+clrf digit_array2_9
+clrf digit_array2_10
+clrf digit_array2_11
+clrf result_array_0
+clrf result_array_1
+clrf result_array_2
+clrf result_array_3
+clrf result_array_4
+clrf result_array_5
+clrf result_array_6
+clrf result_array_7
+clrf result_array_8
+clrf result_array_9
+clrf result_array_10
+clrf result_array_11
+clrf resultDone
+clrf current_digit_value
+clrf timer1_enabled
+clrf button_first_press
+clrf screen1
+clrf transmit_index
+clrf number_transmitted
+clrf number2_transmitted
+clrf result_received
+clrf calculation_done
+clrf digit_index
+movlw TIMEOUT_2_SECONDS
+movwf timeout_counter
+clrf timeout_active
+clrf click_timer
+clrf click_count
+; Initialize new equals screen state
+clrf showing_equals_screen
+; Initialize propagation variables
+clrf propagation_value
+clrf propagation_index
+; Initialize result display cycling
+clrf result_display_state
+clrf result_displayed_once
+
+; Show first number input screen and restart the process
+call show_the_first_num
+call start_timeout
+return
+
 handle_equals_screen_click:
-; When on equals screen, any click starts calculation
-call start_calculation_process
+; User clicked on equals screen to start calculation
+; The calculation will happen automatically via USART, just clear equals screen flag
+bcf showing_equals_screen, 0
+return
+
+cycle_result_display:
+; This function is now handled by handle_result_display_cycling
+; Keeping this label for compatibility but redirecting to the new function
+goto handle_result_display_cycling
+
+display_result_again:
+; Show result again
+call display_result_screen
+return
+
+display_first_number_on_result:
+; Clear screen and show first number on first line
+movlw 0x01
+call lcd_cmd
+movlw 0x0C
+call lcd_cmd
+
+MOVLW 0x80
+CALL lcd_cmd
+MOVLW 'N'
+CALL lcd_data
+MOVLW 'u'
+CALL lcd_data
+MOVLW 'm'
+CALL lcd_data
+MOVLW 'b'
+CALL lcd_data
+MOVLW 'e'
+CALL lcd_data
+MOVLW 'r'
+CALL lcd_data
+MOVLW '1'
+CALL lcd_data
+MOVLW ':'
+CALL lcd_data
+
+movlw 0xc0
+call lcd_cmd
+
+
+; Display first number
+movf digit_array1_0, 0
+addlw '0'
+call lcd_data
+movf digit_array1_1, 0
+addlw '0'
+call lcd_data
+movf digit_array1_2, 0
+addlw '0'
+call lcd_data
+movf digit_array1_3, 0
+addlw '0'
+call lcd_data
+movf digit_array1_4, 0
+addlw '0'
+call lcd_data
+movf digit_array1_5, 0
+addlw '0'
+call lcd_data
+MOVLW '.'
+CALL lcd_data
+movf digit_array1_6, 0
+addlw '0'
+call lcd_data
+movf digit_array1_7, 0
+addlw '0'
+call lcd_data
+movf digit_array1_8, 0
+addlw '0'
+call lcd_data
+movf digit_array1_9, 0
+addlw '0'
+call lcd_data
+movf digit_array1_10, 0
+addlw '0'
+call lcd_data
+movf digit_array1_11, 0
+addlw '0'
+call lcd_data
+return
+
+display_second_number_on_result:
+; Clear screen and show second number on first line
+movlw 0x01
+call lcd_cmd
+movlw 0x0C
+call lcd_cmd
+
+MOVLW 0x80
+CALL lcd_cmd
+MOVLW 'N'
+CALL lcd_data
+MOVLW 'u'
+CALL lcd_data
+MOVLW 'm'
+CALL lcd_data
+MOVLW 'b'
+CALL lcd_data
+MOVLW 'e'
+CALL lcd_data
+MOVLW 'r'
+CALL lcd_data
+MOVLW '2'
+CALL lcd_data
+MOVLW ':'
+CALL lcd_data
+
+movlw 0xc0
+call lcd_cmd
+
+; Display second number
+movf digit_array2_0, 0
+addlw '0'
+call lcd_data
+movf digit_array2_1, 0
+addlw '0'
+call lcd_data
+movf digit_array2_2, 0
+addlw '0'
+call lcd_data
+movf digit_array2_3, 0
+addlw '0'
+call lcd_data
+movf digit_array2_4, 0
+addlw '0'
+call lcd_data
+movf digit_array2_5, 0
+addlw '0'
+call lcd_data
+MOVLW '.'
+CALL lcd_data
+movf digit_array2_6, 0
+addlw '0'
+call lcd_data
+movf digit_array2_7, 0
+addlw '0'
+call lcd_data
+movf digit_array2_8, 0
+addlw '0'
+call lcd_data
+movf digit_array2_9, 0
+addlw '0'
+call lcd_data
+movf digit_array2_10, 0
+addlw '0'
+call lcd_data
+movf digit_array2_11, 0
+addlw '0'
+call lcd_data
 return
 
 handle_single_click:
@@ -709,13 +1080,13 @@ call stop_main_timeout
 return
 
 start_calculation_process:
-; Called when user clicks while on equals screen
-; Clear equals screen flag
-bcf showing_equals_screen, 0
-; Start calculation
-call receive_result_from_slave
-bsf calculation_done, 0
-call stop_main_timeout
+; ; Called when user clicks while on equals screen
+; ; Clear equals screen flag
+; bcf showing_equals_screen, 0
+; ; Start calculation
+; call receive_result_from_slave
+; bsf calculation_done, 0
+; call stop_main_timeout
 return
 
 ;----------------------------------------TIMEOUT FUNCTIONS-------------------------------------------------------------
@@ -734,6 +1105,56 @@ return
 stop_main_timeout:
 bcf timeout_active, 0
 return
+
+display_result_received:
+    MOVLW   0x01
+    CALL    lcd_cmd
+    MOVLW   0x80
+    CALL    lcd_cmd
+    MOVLW 0xc0
+CALL lcd_cmd
+
+movf result_array_0, 0
+addlw '0'
+call lcd_data
+movf result_array_1, 0
+addlw '0'
+call lcd_data
+movf result_array_2, 0
+addlw '0'
+call lcd_data
+movf result_array_3, 0
+addlw '0'
+call lcd_data
+movf result_array_4, 0
+addlw '0'
+call lcd_data
+movf result_array_5, 0
+addlw '0'
+call lcd_data
+MOVLW '.'
+CALL lcd_data
+movf result_array_6, 0
+addlw '0'
+call lcd_data
+movf result_array_7, 0
+addlw '0'
+call lcd_data
+movf result_array_8, 0
+addlw '0'
+call lcd_data
+movf result_array_9, 0
+addlw '0'
+call lcd_data
+movf result_array_10, 0
+addlw '0'
+call lcd_data
+movf result_array_11, 0
+addlw '0'
+call lcd_data
+RETURN
+
+
 
 ;----------------------------------------LCD FUNCTIONS-------------------------------------------------------------
 lcd_data:
@@ -849,16 +1270,7 @@ MOVLW ' '
 CALL lcd_data
 MOVLW '1'
 CALL lcd_data
-MOVLW ' '
-CALL lcd_data
-MOVLW 'F'
-CALL lcd_data
-MOVLW 'R'
-CALL lcd_data
-MOVLW 'A'
-CALL lcd_data
-MOVLW 'C'
-CALL lcd_data
+
 
 MOVLW 0xc0
 CALL lcd_cmd
@@ -895,6 +1307,14 @@ MOVLW ' '
 CALL lcd_data
 MOVLW '2'
 CALL lcd_data
+CALL delay_500ms
+CALL delay_500ms
+
+movlw 0x01
+movwf screen1         ; Set to screen 2
+call lcd_cmd
+movlw 0x0F
+call lcd_cmd
 
 MOVLW 0xc0
 CALL lcd_cmd
@@ -909,35 +1329,6 @@ call lcd_cmd
 movlw 0x0F
 call lcd_cmd
 
-MOVLW 0x80
-CALL lcd_cmd
-MOVLW 'N'
-CALL lcd_data
-MOVLW 'u'
-CALL lcd_data
-MOVLW 'm'
-CALL lcd_data
-MOVLW 'b'
-CALL lcd_data
-MOVLW 'e'
-CALL lcd_data
-MOVLW 'r'
-CALL lcd_data
-MOVLW ' '
-CALL lcd_data
-MOVLW '2'
-CALL lcd_data
-MOVLW ' '
-CALL lcd_data
-MOVLW 'F'
-CALL lcd_data
-MOVLW 'R'
-CALL lcd_data
-MOVLW 'A'
-CALL lcd_data
-MOVLW 'C'
-CALL lcd_data
-
 MOVLW 0xc0
 CALL lcd_cmd
 
@@ -951,77 +1342,6 @@ movlw 0x01
 call lcd_cmd
 movlw 0x0C            ; Display on, cursor off (no blinking cursor needed)
 call lcd_cmd
-
-; Clear both lines first
-MOVLW 0x80
-CALL lcd_cmd
-MOVLW ' '
-CALL lcd_data
-MOVLW ' '
-CALL lcd_data
-MOVLW ' '
-CALL lcd_data
-MOVLW ' '
-CALL lcd_data
-MOVLW ' '
-CALL lcd_data
-MOVLW ' '
-CALL lcd_data
-MOVLW ' '
-CALL lcd_data
-MOVLW ' '
-CALL lcd_data
-MOVLW ' '
-CALL lcd_data
-MOVLW ' '
-CALL lcd_data
-MOVLW ' '
-CALL lcd_data
-MOVLW ' '
-CALL lcd_data
-MOVLW ' '
-CALL lcd_data
-MOVLW ' '
-CALL lcd_data
-MOVLW ' '
-CALL lcd_data
-MOVLW ' '
-CALL lcd_data
-
-MOVLW 0xc0
-CALL lcd_cmd
-MOVLW ' '
-CALL lcd_data
-MOVLW ' '
-CALL lcd_data
-MOVLW ' '
-CALL lcd_data
-MOVLW ' '
-CALL lcd_data
-MOVLW ' '
-CALL lcd_data
-MOVLW ' '
-CALL lcd_data
-MOVLW ' '
-CALL lcd_data
-MOVLW ' '
-CALL lcd_data
-MOVLW ' '
-CALL lcd_data
-MOVLW ' '
-CALL lcd_data
-MOVLW ' '
-CALL lcd_data
-MOVLW ' '
-CALL lcd_data
-MOVLW ' '
-CALL lcd_data
-MOVLW ' '
-CALL lcd_data
-MOVLW ' '
-CALL lcd_data
-MOVLW ' '
-CALL lcd_data
 
 ; Position cursor at the leftmost position of first line and display equals sign
 MOVLW 0x80            ; Leftmost position of first line (position 0)
@@ -1114,6 +1434,9 @@ RETURN
 
 display_result_screen:
 call stop_main_timeout
+
+; Reset display state to show result
+clrf result_display_state
 
 movlw 0x01
 call lcd_cmd
@@ -1324,16 +1647,20 @@ return
 
 ;----------------------------------------USART COMMUNICATION SUBROUTINES-------------------------------------------------------------
 init_master_usart:
-BANKSEL SPBRG
-MOVLW .25
-MOVWF SPBRG
-BANKSEL TXSTA
-BCF TXSTA, SYNC
-BSF TXSTA, TXEN
-BANKSEL RCSTA
-BSF RCSTA, SPEN
-BSF RCSTA, CREN
-RETURN
+    BANKSEL SPBRG
+    MOVLW   .25
+    MOVWF   SPBRG
+    BANKSEL TXSTA
+    BCF     TXSTA, SYNC
+    BSF     TXSTA, TXEN
+    BANKSEL RCSTA
+    BSF     RCSTA, SPEN
+    BSF     RCSTA, CREN
+    BANKSEL PIE1
+    BSF     PIE1, RCIE
+    BANKSEL PIR1
+    BCF     PIR1, RCIF
+    RETURN
 
 show_the_second_num_and_transmit:
 MOVF number_transmitted, 0
@@ -1379,20 +1706,6 @@ BTFSS STATUS, Z
 GOTO transmit_loop_2
 RETURN
 
-receive_result_from_slave:
-CLRF transmit_index
-receive_loop:
-CALL usart_receive_byte
-MOVF transmit_index, 0
-ADDLW result_array_0
-MOVWF FSR
-MOVWF INDF
-INCF transmit_index, 1
-MOVF transmit_index, 0
-SUBLW .12
-BTFSS STATUS, Z
-GOTO receive_loop
-RETURN
 
 usart_send_byte:
 BANKSEL TXSTA
@@ -1402,13 +1715,6 @@ BANKSEL TXREG
 MOVWF TXREG
 RETURN
 
-usart_receive_byte:
-BANKSEL PIR1
-BTFSS PIR1, RCIF
-GOTO $-1
-BANKSEL RCREG
-MOVF RCREG, 0
-RETURN
 
 INCLUDE "LCDIS.INC"
 END
