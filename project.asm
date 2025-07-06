@@ -2,822 +2,1413 @@ PROCESSOR 16F877A
 __CONFIG 0x3731
 INCLUDE "P16F877A.INC"
 
-
 ; --- VARIABLES ---
-    CBLOCK 0x20
-        delay_ms_count
-        blink_counter
-        temp_char
-        current_digit_value   ; Binary value of digit (0–9)
-        digit_cursor_pos      ; Current digit index (0 to 12), 6 is the decimal point position
-        digit_array1_0
-        digit_array1_1
-        digit_array1_2
-        digit_array1_3
-        digit_array1_4
-        digit_array1_5
-        digit_array1_6
-        digit_array1_7
-        digit_array1_8
-        digit_array1_9
-        digit_array1_10
-        digit_array1_11
-        digit_array2_0
-        digit_array2_1
-        digit_array2_2
-        digit_array2_3
-        digit_array2_4
-        digit_array2_5
-        digit_array2_6
-        digit_array2_7
-        digit_array2_8
-        digit_array2_9        
-        digit_array2_10
-        digit_array2_11
-        timer1_enabled        ; Flag to track if Timer1 is enabled
-        button_first_press    ; Flag to track first button press
-        screen1
-        ; USART variables for communication with slave PIC
-        transmit_index        ; Index for transmitting digits (0-11)
-        number_transmitted    ; Flag to track if first number was transmitted
-        number2_transmitted   ; Flag to track if second number was transmitted
+CBLOCK 0x20
+delay_ms_count
+blink_counter
+temp_char
+current_digit_value
+digit_cursor_pos
+digit_array1_0
+digit_array1_1
+digit_array1_2
+digit_array1_3
+digit_array1_4
+digit_array1_5
+digit_array1_6
+digit_array1_7
+digit_array1_8
+digit_array1_9
+digit_array1_10
+digit_array1_11
+digit_array2_0
+digit_array2_1
+digit_array2_2
+digit_array2_3
+digit_array2_4
+digit_array2_5
+digit_array2_6
+digit_array2_7
+digit_array2_8
+digit_array2_9
+digit_array2_10
+digit_array2_11
+result_array_0
+result_array_1
+result_array_2
+result_array_3
+result_array_4
+result_array_5
+result_array_6
+result_array_7
+result_array_8
+result_array_9
+result_array_10
+result_array_11
+timer1_enabled
+button_first_press
+screen1
+transmit_index
+number_transmitted
+number2_transmitted
+result_received
+calculation_done
+; TIMEOUT VARIABLES
+timeout_counter
+timeout_active
+; SIMPLIFIED DOUBLE CLICK DETECTION
+click_timer
+click_count
+; PART TRACKING
+current_part ; 0 = integer part, 1 = fractional part
+; NEW FEATURE: EQUALS SCREEN STATE
+showing_equals_screen
+; NEW FEATURE: PROPAGATION VARIABLES
+propagation_value
+propagation_index
+ENDC
 
-    ENDC
+pushButton EQU 0    ; Button on RB0
 
-pushButton EQU 0 ;the pin zero of portB
+; 2 seconds timeout = 2000ms = 200 * 10ms loops
+; But since original was moving after 5 seconds when set to 100,
+; For 2 seconds we need: 100 * (2/5) = 40
+TIMEOUT_2_SECONDS EQU .40
 
+; FIXED: Reduced double-click window from 300ms to 150ms to avoid conflict with fast single clicks
+; 150ms = 15 * 10ms loops
+DOUBLE_CLICK_TIMEOUT EQU .15
 
-	ORG	0x00		; Default start address 
-	GOTO start		;go to that label....
+ORG 0x00
+GOTO start
 
+ORG 0x04
+GOTO ISR_handler
 
-	ORG 0x04
-    GOTO ISR_pushButton       ; Interrupt Service Routine jump
+;----------------------------------------MAIN PROGRAM-------------------------------------------------------------
+start:
+NOP
 
+; Configure I/O ports
+BANKSEL TRISD
+MOVLW B'00000000'
+MOVWF TRISD 
+MOVLW B'00000001'
+MOVWF TRISB
 
-;----------------------------------------MAIN-------------------------------------------------------------
-start
-	NOP			; required for ICD mode
+; Configure USART pins
+BANKSEL TRISC
+BCF TRISC, 6
+BSF TRISC, 7
 
-	BANKSEL	TRISD
-	MOVLW	B'00000000' 	;1 for input, 0 for output.
-	MOVWF 	TRISD 
-	MOVLW 	B'00000001'		;make the push button as input...
-	MOVWF 	TRISB
-	;this sets all bins in the d port to be output.
-	;the registor of the interupt is in the same bank	
-    
-    ; Configure USART pins for communication with slave PIC
-    ; USART = Universal Synchronous Asynchronous Receiver Transmitter
-    ; RC6 = TX (Transmit) pin - sends data to slave PIC
-    ; RC7 = RX (Receive) pin - receives data from slave PIC
-    BANKSEL TRISC
-    BCF     TRISC, 6        ; RC6/TX pin as output (transmit to slave)
-    BSF     TRISC, 7        ; RC7/RX pin as input (receive from slave)
-    
-    BANKSEL	OPTION_REG
-    BCF OPTION_REG, INTEDG  ; 0 = interrupt on falling edge
-	
-	; Configure Timer1 for 1 second interrupt (but don't enable yet)
-	BANKSEL T1CON
-	MOVLW   B'00110000'     ; Timer1 prescaler 1:8, Timer1 oscillator disabled, internal clock
-	MOVWF   T1CON           ; Timer1 control register (Timer1 disabled initially)
-		
-	
-	; Configure Timer1 interrupt (but don't enable yet)
-	BANKSEL PIE1
-	BCF PIE1, TMR1IE    ; Timer1 interrupt disabled initially
-	BANKSEL PIR1
-	BCF PIR1, TMR1IF    ; Clear Timer1 interrupt flag
+; Configure interrupt
+BANKSEL OPTION_REG
+BCF OPTION_REG, INTEDG
 
-    ; Initialize USART for communication with slave PIC
-    ; This sets up the hardware for serial communication
-    CALL    init_master_usart
+; Configure Timer1 for 10ms interrupts
+BANKSEL T1CON
+MOVLW B'00110001'
+MOVWF T1CON
 
-	BANKSEL PORTD 	;go back to bank0 which has the value of the d ports.
-	CLRF PORTD 		;clear all the pins.. set zero as output.
-;----
-	; Initialize variables
-    clrf digit_cursor_pos
-    clrf    digit_array1_0
-    clrf    digit_array1_1
-    clrf    digit_array1_2
-    clrf    digit_array1_3
-    clrf    digit_array1_4
-    clrf    digit_array1_5
-    clrf    digit_array1_6
-    clrf    digit_array1_7
-    clrf    digit_array1_8
-    clrf    digit_array1_9
-    clrf    digit_array1_10    
-    clrf    digit_array1_11
-    clrf    digit_array2_0
-    clrf    digit_array2_1
-    clrf    digit_array2_2
-    clrf    digit_array2_3
-    clrf    digit_array2_4
-    clrf    digit_array2_5
-    clrf    digit_array2_6
-    clrf    digit_array2_7
-    clrf    digit_array2_8
-    clrf    digit_array2_9
-    clrf    digit_array2_10    
-    clrf    digit_array2_11
-    clrf    current_digit_value
-    clrf    timer1_enabled      ; Timer1 not enabled initially
-    clrf    button_first_press  ; No button press detected yet
-    clrf    screen1
-    ; Initialize USART variables
-    clrf    transmit_index      ; Start transmitting from first digit
-    clrf    number_transmitted  ; First number not transmitted yet
-    clrf    number2_transmitted ; Second number not transmitted yet
-;-----
-	CALL    inid 			;calls inid method to initialize the lcd, this method is inside LCDIS.INC
-  	;then print the welcomming page.....
-	CALL    print_welcome
+; Set Timer1 initial value for 10ms overflow
+BANKSEL TMR1H
+MOVLW 0xEC
+MOVWF TMR1H
+MOVLW 0x78
+MOVWF TMR1L
 
-	movlw    .3
-    movwf    blink_counter
+; Configure Timer1 interrupt
+BANKSEL PIE1
+BSF PIE1, TMR1IE
+BANKSEL PIR1
+BCF PIR1, TMR1IF
+
+; Initialize USART
+CALL init_master_usart
+
+; Return to bank 0
+BANKSEL PORTD
+CLRF PORTD
+
+; Initialize all variables
+clrf digit_cursor_pos
+clrf current_part
+clrf digit_array1_0
+clrf digit_array1_1
+clrf digit_array1_2
+clrf digit_array1_3
+clrf digit_array1_4
+clrf digit_array1_5
+clrf digit_array1_6
+clrf digit_array1_7
+clrf digit_array1_8
+clrf digit_array1_9
+clrf digit_array1_10
+clrf digit_array1_11
+clrf digit_array2_0
+clrf digit_array2_1
+clrf digit_array2_2
+clrf digit_array2_3
+clrf digit_array2_4
+clrf digit_array2_5
+clrf digit_array2_6
+clrf digit_array2_7
+clrf digit_array2_8
+clrf digit_array2_9
+clrf digit_array2_10
+clrf digit_array2_11
+clrf result_array_0
+clrf result_array_1
+clrf result_array_2
+clrf result_array_3
+clrf result_array_4
+clrf result_array_5
+clrf result_array_6
+clrf result_array_7
+clrf result_array_8
+clrf result_array_9
+clrf result_array_10
+clrf result_array_11
+clrf current_digit_value
+clrf timer1_enabled
+clrf button_first_press
+clrf screen1
+clrf transmit_index
+clrf number_transmitted
+clrf number2_transmitted
+clrf result_received
+clrf calculation_done
+movlw TIMEOUT_2_SECONDS
+movwf timeout_counter
+clrf timeout_active
+clrf click_timer
+clrf click_count
+; Initialize new equals screen state
+clrf showing_equals_screen
+; Initialize propagation variables
+clrf propagation_value
+clrf propagation_index
+
+; Initialize LCD
+CALL inid
+
+; Show welcome message
+CALL print_welcome
+
+; Blink display 3 times
+movlw .3
+movwf blink_counter
 blink_loop:
-	CALL    delay_500ms
-    MOVLW   0x08  				; turns the screen off
-    CALL    lcd_cmd
-    CALL    delay_500ms
-	MOVLW   0x0c 				 ; turns the screen on.
-    CALL    lcd_cmd				;this is a one blink, off then on
-	decfsz  blink_counter, 1 	;decrement the counter by one, if it zero, skip the next instruction.
-    goto    blink_loop
-    
-	;now i want to make a delay of two seconds, then move to the next step.
-	CALL    delay_500ms
-	CALL    delay_500ms	
-	CALL    delay_500ms
-	CALL    delay_500ms
-	;---
-	CALL    show_the_first_num
-    BANKSEL INTCON
-	BSF INTCON, INTE    ; Enable external interrupt (RB0/INT)
-	BSF INTCON, PEIE    ; Enable peripheral interrupts
-	BSF INTCON, GIE     ; Enable all unmasked interrupts
-	BCF INTCON, INTF    ; Clear any pending INT interrupt
+CALL delay_500ms
+MOVLW 0x08
+CALL lcd_cmd
+CALL delay_500ms
+MOVLW 0x0c
+CALL lcd_cmd
+decfsz blink_counter, 1
+goto blink_loop
+
+; Delay before starting input
+CALL delay_500ms
+CALL delay_500ms
+CALL delay_500ms
+CALL delay_500ms
+
+; Show first number input screen
+CALL show_the_first_num
+
+; Start timeout
+CALL start_timeout
+
+; Enable interrupts
+BANKSEL INTCON
+BSF INTCON, INTE
+BSF INTCON, PEIE
+BSF INTCON, GIE
+BCF INTCON, INTF
 
 main_loop:
-	; Main loop - just wait for interrupts
-	; The ISR will handle button presses and digit increments
-	goto main_loop
-		
-GOTO done
- INCLUDE "LCDIS.INC"
-;------------------------SUBROTUINE------------------------------------------------------------------------------------
-ISR_pushButton:
-    ; The logic is this: when the button is pressed, it will increment the digit that I'm currently at, 
-    ; I can access it from the position of the cursor, which is stored in the digit_cursor_pos variable.
+; Check if showing equals screen
+btfsc showing_equals_screen, 0
+goto main_loop_continue
+; Check if calculation is done and display result
+btfsc calculation_done, 0
+call display_result_screen
+main_loop_continue:
+goto main_loop
 
-    ; Let's first implement the logic of incrementing the digit.
-    ; The cursor, in the first time, is at the first digit, which is the 0th digit.
-    
-    ; Save W register context
-    movwf   temp_char
-    
-    ; Clear the interrupt flag to avoid re-entering the ISR immediately
-    BCF     INTCON, INTF
-    
+;----------------------------------------INTERRUPT SERVICE ROUTINE-------------------------------------------------------------
+ISR_handler:
+movwf temp_char
 
-    ; Simple debounce
-    call    debounce
-    ; Check if button is still pressed (active low)
-    btfsc   PORTB, pushButton
-    goto    isr_exit            ; Button not pressed, false trigger
-    ; if the button is still pressed, i want to wait for 500ms and then check again, if still pressed, move the cursor.
-    CALL delay_500ms; i know that the ISR must be short, but i don't want to use timers and make it harder.
-    btfsc   PORTB, pushButton
-    goto    shortPulse
-    ;else long pulse.
-    goto   longPulse
+; Check what caused the interrupt
+BANKSEL PIR1
+btfsc PIR1, TMR1IF
+goto timer1_interrupt
 
-shortPulse:
-    ; Increment the digit at current cursor position
-    movlw   .1
-    subwf   screen1, 0
-    btfss   STATUS, Z ; Check if this is the first screen
-    goto    screen1_increment
-    ; else we are in screen 2
-    call    increment_current_digit_2 ; Increment the digit at current cursor position
-    goto    point1
-screen1_increment:
-    call    increment_current_digit_1
-    ; Update the display to show the new digit
+; External interrupt (button press)
+BANKSEL INTCON
+btfsc INTCON, INTF
+goto button_interrupt
 
-point1:
-    movlw   .1
-    subwf   screen1, 0
-    btfss   STATUS, Z ; Check if this is the first screen
-    goto    screen1_display
-    ; else we are in screen 2
-    call    update_single_digit_display_2 ; Update the display to show the new digit
-    goto    isr_exit ; Exit ISR after updating display
-screen1_display:
-    call    update_single_digit_display_1
-    goto    isr_exit ; Exit ISR after updating display
+goto isr_exit
 
-longPulse:
-    ;move the cursor to the next digit
-    incf    digit_cursor_pos, 1 ; Move to next digit
-    ; If the cursor position exceeds the last digit, move to NUMBER 2.
-    ;now i want to check, if the cursor is at the 6th digit, which is the decimal point, i want to skip it.
-    movlw   0x06
-    subwf   digit_cursor_pos, 0 ; Check if cursor is at decimal point
-    btfsc   STATUS, Z           ; If cursor is at decimal point (Z==1), increment again, if z=0 (sub res is not 0) skip.
-    incf    digit_cursor_pos, 1 ; Skip decimal point
-    ; If the cursor position exceeds the last digit, handle based on current screen
-    movlw   0x0D                ; Last digit position (12)
-    subwf   digit_cursor_pos, 0 ; Check if cursor exceeds last digit
-    btfss   STATUS, Z           ; If cursor doesn't exceed last digit, skip
-    goto    continue_longpulse  ; Continue with normal cursor update
-    
-    ; Cursor exceeded last digit - check which screen we're on
-    movlw   .1
-    subwf   screen1, 0
-    btfss   STATUS, Z           ; Check if this is the second screen
-    goto    first_screen_end    ; We're on first screen
-    ; We're on second screen - transmit second number
-    ; Check if we haven't transmitted the second number yet
-    movf    number2_transmitted, 0
-    sublw   .0                  ; Check if number2_transmitted == 0
-    btfss   STATUS, Z           ; If not zero, skip transmission
-    goto    isr_exit            ; Already transmitted, just exit
-    
-    call    transmit_second_number_to_slave
-    ; Mark that we've transmitted the second number
-    movlw   .1
-    movwf   number2_transmitted
-    goto    isr_exit            ; Exit after transmission
-first_screen_end:
-    ; We're on first screen - show second number and transmit first
-    call    show_the_second_num_and_transmit
-    goto    isr_exit            ; Exit after showing second screen
-continue_longpulse:
-    ;else update the display, then exit
+timer1_interrupt:
+; Clear Timer1 interrupt flag
+BANKSEL PIR1
+BCF PIR1, TMR1IF
 
-    movlw   .1
-    subwf   screen1, 0
-    btfss   STATUS, Z ; Check if this is the first screen
-    goto    screen1_cursor
-    ; else we are in screen 2
-    call    update_single_digit_display_2 ; Update display with new digit
-    goto    isr_exit ; Exit ISR after updating display
-screen1_cursor:
-    call    update_single_digit_display_1 ; Update display with new digit
-    ; Reposition cursor for blinking
+; Reload Timer1 for next 10ms
+BANKSEL TMR1H
+MOVLW 0xEC
+MOVWF TMR1H
+MOVLW 0x78
+MOVWF TMR1L
+
+; Handle click timer for double-click detection
+movf click_timer, 0
+btfsc STATUS, Z
+goto check_main_timeout
+decfsz click_timer, 1
+goto check_main_timeout
+; Click timer expired - reset click count
+clrf click_count
+
+check_main_timeout:
+; Skip timeout if showing equals screen
+btfsc showing_equals_screen, 0
+goto isr_exit
+
+; Check if main timeout is active
+btfss timeout_active, 0
+goto isr_exit
+
+; Decrement main timeout counter
+decfsz timeout_counter, 1
+goto isr_exit
+
+; FIXED: Simple timeout occurred - do propagation and advance in one atomic operation
+; First, disable timeout to prevent re-entry
+bcf timeout_active, 0
+
+; Do propagation
+call do_propagation_only
+
+; Advance cursor
+call do_cursor_advance_only
+
+; Re-enable timeout with fresh 2-second counter
+movlw TIMEOUT_2_SECONDS
+movwf timeout_counter
+bsf timeout_active, 0
+
+goto isr_exit
+
+button_interrupt:
+; Clear the interrupt flag
+BANKSEL INTCON
+BCF INTCON, INTF
+
+; Simple debounce
+call debounce
+
+; Check if button is still pressed (active low)
+btfsc PORTB, pushButton
+goto isr_exit
+
+; Handle button click
+call handle_button_click
+
 isr_exit:
-    ; Restore W register context
-    movf    temp_char, 0
-    RETFIE
+movf temp_char, 0
+RETFIE
 
+;----------------------------------------FIXED: SIMPLIFIED PROPAGATION FUNCTIONS-------------------------------------------------------------
+do_propagation_only:
+; Simple propagation without any timeout manipulation
+movlw .1
+subwf screen1, 0
+btfss STATUS, Z
+goto do_prop_num1
+; Screen 2 - Number 2
+call get_digit_value_num2
+call propagate_remaining_num2
+; Update display
+MOVLW 0xc0
+CALL lcd_cmd
+CALL display_all_digits_2
+return
 
+do_prop_num1:
+; Screen 1 - Number 1
+call get_digit_value_num1
+call propagate_remaining_num1
+; Update display
+MOVLW 0xc0
+CALL lcd_cmd
+CALL display_all_digits_1
+return
 
-;-------------------------Subroutines------------------------------------
+; NEW FEATURE: Propagation for double-click transitions
+do_propagation_for_double_click:
+; Propagate current digit before transitioning
+movlw .1
+subwf screen1, 0
+btfss STATUS, Z
+goto prop_double_click_num1
+; Screen 2 - Number 2
+call get_digit_value_num2
+call propagate_remaining_num2
+return
 
+prop_double_click_num1:
+; Screen 1 - Number 1
+call get_digit_value_num1
+call propagate_remaining_num1
+return
+
+do_cursor_advance_only:
+; Simple cursor advancement without timeout manipulation
+btfsc current_part, 0
+goto advance_frac_simple
+goto advance_int_simple
+
+advance_int_simple:
+; Advance in integer part (0-5)
+incf digit_cursor_pos, 1
+movf digit_cursor_pos, 0
+sublw .6
+btfsc STATUS, Z
+goto stay_at_int_end_simple
+; Position cursor and enable blinking
+movlw 0x0F
+call lcd_cmd
+call position_cursor
+return
+
+stay_at_int_end_simple:
+movlw .5
+movwf digit_cursor_pos
+movlw 0x0F
+call lcd_cmd
+call position_cursor
+return
+
+advance_frac_simple:
+; Advance in fractional part (7-12)
+incf digit_cursor_pos, 1
+movf digit_cursor_pos, 0
+sublw .13
+btfsc STATUS, Z
+goto stay_at_frac_end_simple
+; Position cursor and enable blinking
+movlw 0x0F
+call lcd_cmd
+call position_cursor
+return
+
+stay_at_frac_end_simple:
+movlw .12
+movwf digit_cursor_pos
+movlw 0x0F
+call lcd_cmd
+call position_cursor
+return
+
+get_digit_value_num1:
+; Get value of current digit in number 1
+movf digit_cursor_pos, 0
+sublw .6
+btfss STATUS, C
+goto get_frac_digit_1
+; Integer digit (positions 0-5)
+movf digit_cursor_pos, 0
+addlw digit_array1_0
+movwf FSR
+movf INDF, 0
+movwf propagation_value
+return
+get_frac_digit_1:
+; Fractional digit (positions 7-12, map to array indices 6-11)
+movf digit_cursor_pos, 0
+addlw .255              ; Subtract 1 (adjust for decimal point)
+addlw digit_array1_0
+movwf FSR
+movf INDF, 0
+movwf propagation_value
+return
+
+get_digit_value_num2:
+; Get value of current digit in number 2
+movf digit_cursor_pos, 0
+sublw .6
+btfss STATUS, C
+goto get_frac_digit_2
+; Integer digit (positions 0-5)
+movf digit_cursor_pos, 0
+addlw digit_array2_0
+movwf FSR
+movf INDF, 0
+movwf propagation_value
+return
+get_frac_digit_2:
+; Fractional digit (positions 7-12, map to array indices 6-11)
+movf digit_cursor_pos, 0
+addlw .255              ; Subtract 1 (adjust for decimal point)
+addlw digit_array2_0
+movwf FSR
+movf INDF, 0
+movwf propagation_value
+return
+
+propagate_remaining_num1:
+; Propagate to all remaining digits in number 1 (both integer and fractional)
+movf digit_cursor_pos, 0
+addlw .1                ; Start from next position
+movwf propagation_index
+
+prop_loop_1:
+; Check if we've reached the end of all digits (position 13)
+movf propagation_index, 0
+sublw .13
+btfsc STATUS, Z
+return                  ; End of propagation
+
+; Skip position 6 (decimal point)
+movf propagation_index, 0
+sublw .6
+btfsc STATUS, Z
+goto skip_decimal_1
+
+; Map position to array index
+movf propagation_index, 0
+sublw .6
+btfss STATUS, C
+goto prop_frac_1
+
+; Integer position (0-5)
+movf propagation_index, 0
+addlw digit_array1_0
+movwf FSR
+movf propagation_value, 0
+movwf INDF
+goto next_pos_1
+
+prop_frac_1:
+; Fractional position (7-12, map to array indices 6-11)
+movf propagation_index, 0
+addlw .255              ; Subtract 1
+addlw digit_array1_0
+movwf FSR
+movf propagation_value, 0
+movwf INDF
+goto next_pos_1
+
+skip_decimal_1:
+; Skip decimal point position
+goto next_pos_1
+
+next_pos_1:
+incf propagation_index, 1
+goto prop_loop_1
+
+propagate_remaining_num2:
+; Propagate to all remaining digits in number 2 (both integer and fractional)
+movf digit_cursor_pos, 0
+addlw .1                ; Start from next position
+movwf propagation_index
+
+prop_loop_2:
+; Check if we've reached the end of all digits (position 13)
+movf propagation_index, 0
+sublw .13
+btfsc STATUS, Z
+return                  ; End of propagation
+
+; Skip position 6 (decimal point)
+movf propagation_index, 0
+sublw .6
+btfsc STATUS, Z
+goto skip_decimal_2
+
+; Map position to array index
+movf propagation_index, 0
+sublw .6
+btfss STATUS, C
+goto prop_frac_2
+
+; Integer position (0-5)
+movf propagation_index, 0
+addlw digit_array2_0
+movwf FSR
+movf propagation_value, 0
+movwf INDF
+goto next_pos_2
+
+prop_frac_2:
+; Fractional position (7-12, map to array indices 6-11)
+movf propagation_index, 0
+addlw .255              ; Subtract 1
+addlw digit_array2_0
+movwf FSR
+movf propagation_value, 0
+movwf INDF
+goto next_pos_2
+
+skip_decimal_2:
+; Skip decimal point position
+goto next_pos_2
+
+next_pos_2:
+incf propagation_index, 1
+goto prop_loop_2
+
+;----------------------------------------BUTTON HANDLING-------------------------------------------------------------
+handle_button_click:
+; Check if we're showing equals screen
+btfsc showing_equals_screen, 0
+goto handle_equals_screen_click
+
+; Normal button handling for input screens
+; Reset main timeout when any button press occurs
+call restart_main_timeout
+
+; Increment click count
+incf click_count, 1
+
+; Start/restart click timer for double-click window
+movlw DOUBLE_CLICK_TIMEOUT
+movwf click_timer
+
+; Check click count
+movf click_count, 0
+sublw .1
+btfsc STATUS, Z
+goto handle_single_click
+
+movf click_count, 0
+sublw .2
+btfsc STATUS, Z
+goto handle_double_click
+
+; More than 2 clicks - reset and treat as single click
+; ENHANCED: If more than 2 clicks, treat them as rapid single clicks
+clrf click_count
+clrf click_timer
+; Process as single click
+goto handle_single_click
+
+handle_equals_screen_click:
+; When on equals screen, any click starts calculation
+call start_calculation_process
+return
+
+handle_single_click:
+; Just increment the current digit - no cursor movement
+movlw .1
+subwf screen1, 0
+btfss STATUS, Z
+goto single_click_screen1
+call increment_current_digit_2
+call update_single_digit_display_2
+return
+
+single_click_screen1:
+call increment_current_digit_1
+call update_single_digit_display_1
+return
+
+handle_double_click:
+; Reset click detection immediately
+clrf click_count
+clrf click_timer
+
+; Stop main timeout during transition
+call stop_main_timeout
+
+; NEW FEATURE: Do propagation before any double-click transition
+call do_propagation_for_double_click
+
+; Handle double-click based on current state
+movlw .1
+subwf screen1, 0
+btfss STATUS, Z
+goto double_click_screen1
+
+; Screen 2 (Number 2)
+btfsc current_part, 0
+goto move_to_equals_screen  ; Show equals screen
+goto move_to_fractional_part2
+
+double_click_screen1:
+; Screen 1 (Number 1)
+btfsc current_part, 0
+goto move_to_number2
+goto move_to_fractional_part1
+
+move_to_fractional_part1:
+; Switch to fractional part (propagation already done)
+bsf current_part, 0
+movlw .7
+movwf digit_cursor_pos
+call show_the_first_num_fractional
+call restart_main_timeout
+return
+
+move_to_number2:
+; Move to second number (propagation already done)
+; First transmit the first number
+movf number_transmitted, 0
+sublw .0
+btfss STATUS, Z
+goto skip_transmission
+call transmit_first_number_to_slave
+movlw .1
+movwf number_transmitted
+
+skip_transmission:
+; Reset states for second number input - EXACTLY like first number
+clrf current_part      ; Reset to integer part
+clrf digit_cursor_pos  ; Reset to first digit position
+; Clear click states
+clrf click_count
+clrf click_timer
+; Show second number screen
+call show_the_second_num
+; Start fresh timeout for second number
+call restart_main_timeout
+return
+
+move_to_fractional_part2:
+; Switch to fractional part (propagation already done)
+bsf current_part, 0
+movlw .7
+movwf digit_cursor_pos
+call show_the_second_num_fractional
+call restart_main_timeout
+return
+
+move_to_equals_screen:
+; Show equals screen (propagation already done)
+; First transmit second number if not already done
+movf number2_transmitted, 0
+sublw .0
+btfss STATUS, Z
+goto skip_second_transmission
+call transmit_second_number_to_slave
+movlw .1
+movwf number2_transmitted
+
+skip_second_transmission:
+; Show equals screen
+call show_equals_screen
+; Set equals screen flag
+bsf showing_equals_screen, 0
+; Stop timeout since we're waiting for user action
+call stop_main_timeout
+return
+
+start_calculation_process:
+; Called when user clicks while on equals screen
+; Clear equals screen flag
+bcf showing_equals_screen, 0
+; Start calculation
+call receive_result_from_slave
+bsf calculation_done, 0
+call stop_main_timeout
+return
+
+;----------------------------------------TIMEOUT FUNCTIONS-------------------------------------------------------------
+start_timeout:
+movlw TIMEOUT_2_SECONDS
+movwf timeout_counter
+bsf timeout_active, 0
+return
+
+restart_main_timeout:
+movlw TIMEOUT_2_SECONDS
+movwf timeout_counter
+bsf timeout_active, 0
+return
+
+stop_main_timeout:
+bcf timeout_active, 0
+return
+
+;----------------------------------------LCD FUNCTIONS-------------------------------------------------------------
 lcd_data:
-	BSF Select,RS
-	CALL send
-	RETURN
+BSF Select,RS
+CALL send
+RETURN
 
 lcd_cmd:
-	BCF Select,RS
-	CALL send
-	RETURN
-
+BCF Select,RS
+CALL send
+RETURN
 
 print_welcome:
-	MOVLW 0x80			;LCD command to make the cursor at the 1st line.
-    CALL lcd_cmd        ; Send command to LCD, this subroutine is in LCDIS.INC
+MOVLW 0x80
+CALL lcd_cmd
+MOVLW 'W'
+CALL lcd_data
+MOVLW 'e'
+CALL lcd_data
+MOVLW 'l'
+CALL lcd_data
+MOVLW 'c'
+CALL lcd_data
+MOVLW 'o'
+CALL lcd_data
+MOVLW 'm'
+CALL lcd_data
+MOVLW 'e'
+CALL lcd_data
+MOVLW ' '
+CALL lcd_data
+MOVLW 't'
+CALL lcd_data
+MOVLW 'o'
+CALL lcd_data
 
-	MOVLW 'W'   	 ; Load character to display	 
-    CALL lcd_data       ; Call subroutine to send data to LCD
-
-    MOVLW 'e'    	 ; Load character to display
-    CALL lcd_data        ; Call subroutine to send data to LCD
-
-	MOVLW 'l'    	 ; Load character to display 		 
-    CALL lcd_data        ; Call subroutine to send data to LCD
-
-	MOVLW 'c'    	 ; Load character to display		 
-    CALL lcd_data        ; Call subroutine to send data to LCD
-
-	MOVLW 'o'    	 ; Load character to display	 
-    CALL lcd_data        ; Call subroutine to send data to LCD
-
-	MOVLW 'm'    	 ; Load character to display	 
-    CALL lcd_data        ; Call subroutine to send data to LCD
-
-	MOVLW 'e'    	 ; Load character to display	 
-    CALL lcd_data        ; Call subroutine to send data to LCD
-
-	MOVLW ' '    	 ; Load character to display		 
-    CALL lcd_data        ; Call subroutine to send data to LCD
-
-	MOVLW 't'    	 ; Load character to display	 
-    CALL lcd_data        ; Call subroutine to send data to LCD
-
-	MOVLW 'o'    	 ; Load character to display
-    CALL lcd_data        ; Call subroutine to send data to LCD
-
-
-	MOVLW 0xc0			;LCD command to make the cursor at the 2st line.
-    CALL lcd_cmd       ; Send command to LCD, this subroutine is in LCDIS.INC
-
-	MOVLW 'D'   	 ; Load character to display
-    CALL lcd_data        ; Call subroutine to send data to LCD
-
-    MOVLW 'i'    	 ; Load character to display 		 
-    CALL lcd_data        ; Call subroutine to send data to LCD
-
-	MOVLW 'v'    	 ; Load character to display	 
-    CALL lcd_data        ; Call subroutine to send data to LCD
-
-	MOVLW 'i'    	 ; Load character to display		 
-    CALL lcd_data        ; Call subroutine to send data to LCD
-
-	MOVLW 'o'    	 ; Load character to display		 
-    CALL lcd_data        ; Call subroutine to send data to LCD
-
-	MOVLW 'n'    	 ; Load character to display		 
-    CALL lcd_data        ; Call subroutine to send data to LCD
+MOVLW 0xc0
+CALL lcd_cmd
+MOVLW 'D'
+CALL lcd_data
+MOVLW 'i'
+CALL lcd_data
+MOVLW 'v'
+CALL lcd_data
+MOVLW 'i'
+CALL lcd_data
+MOVLW 's'
+CALL lcd_data
+MOVLW 'i'
+CALL lcd_data
+MOVLW 'o'
+CALL lcd_data
+MOVLW 'n'
+CALL lcd_data
 RETURN
 
 show_the_first_num:
-	movlw   0x01
-    call    lcd_cmd
-    movlw   0x0F          ; Cursor ON, Blink ON
-    call    lcd_cmd
-	
-	MOVLW 'N'   	 ; Load character to display	 
-    CALL lcd_data       ; Call subroutine to send data to LCD
-	
-	MOVLW 'u'   	 ; Load character to display	 
-    CALL lcd_data       ; Call subroutine to send data to LCD
-	MOVLW 'm'   	 ; Load character to display	 
-    CALL lcd_data       ; Call subroutine to send data to LCD
-	MOVLW 'b'   	 ; Load character to display	 
-    CALL lcd_data       ; Call subroutine to send data to LCD
-	MOVLW 'e'   	 ; Load character to display	 
-    CALL lcd_data       ; Call subroutine to send data to LCD
-	MOVLW 'r'   	 ; Load character to display	 
-    CALL lcd_data       ; Call subroutine to send data to LCD
-	MOVLW ' '   	 ; Load character to display	 
-    CALL lcd_data       ; Call subroutine to send data to LCD	
-    MOVLW '1'   	 ; Load character to display	 
-    CALL lcd_data       ; Call subroutine to send data to LCD
-	MOVLW 0xc0
-	CALL lcd_cmd
-	
-	CALL display_all_digits_1
-	CALL position_cursor        ; Position cursor at first digit
-	RETURN
+clrf current_part
+clrf digit_cursor_pos
+
+movlw 0x01
+call lcd_cmd
+movlw 0x0F
+call lcd_cmd
+
+MOVLW 0x80
+CALL lcd_cmd
+MOVLW 'N'
+CALL lcd_data
+MOVLW 'u'
+CALL lcd_data
+MOVLW 'm'
+CALL lcd_data
+MOVLW 'b'
+CALL lcd_data
+MOVLW 'e'
+CALL lcd_data
+MOVLW 'r'
+CALL lcd_data
+MOVLW ' '
+CALL lcd_data
+MOVLW '1'
+CALL lcd_data
+
+MOVLW 0xc0
+CALL lcd_cmd
+
+CALL display_all_digits_1
+CALL position_cursor
+RETURN
+
+show_the_first_num_fractional:
+movlw 0x01
+call lcd_cmd
+movlw 0x0F
+call lcd_cmd
+
+MOVLW 0x80
+CALL lcd_cmd
+MOVLW 'N'
+CALL lcd_data
+MOVLW 'u'
+CALL lcd_data
+MOVLW 'm'
+CALL lcd_data
+MOVLW 'b'
+CALL lcd_data
+MOVLW 'e'
+CALL lcd_data
+MOVLW 'r'
+CALL lcd_data
+MOVLW ' '
+CALL lcd_data
+MOVLW '1'
+CALL lcd_data
+MOVLW ' '
+CALL lcd_data
+MOVLW 'F'
+CALL lcd_data
+MOVLW 'R'
+CALL lcd_data
+MOVLW 'A'
+CALL lcd_data
+MOVLW 'C'
+CALL lcd_data
+
+MOVLW 0xc0
+CALL lcd_cmd
+
+CALL display_all_digits_1
+CALL position_cursor
+RETURN
 
 show_the_second_num:
+; Don't reset current_part and digit_cursor_pos here
+; They should already be set by the calling function
 
-	movlw   0x01
-    movwf screen1 ; make this var = 1, so i know that i am in the second screen.
-    call    lcd_cmd
-    movlw   0x0F          ; Cursor ON, Blink ON
-    call    lcd_cmd
-	
-	MOVLW 'N'   	 ; Load character to display	 
-    CALL lcd_data       ; Call subroutine to send data to LCD
-	
-	MOVLW 'u'   	 ; Load character to display	 
-    CALL lcd_data       ; Call subroutine to send data to LCD
-	MOVLW 'm'   	 ; Load character to display	 
-    CALL lcd_data       ; Call subroutine to send data to LCD
-	MOVLW 'b'   	 ; Load character to display	 
-    CALL lcd_data       ; Call subroutine to send data to LCD
-	MOVLW 'e'   	 ; Load character to display	 
-    CALL lcd_data       ; Call subroutine to send data to LCD
-	MOVLW 'r'   	 ; Load character to display	 
-    CALL lcd_data       ; Call subroutine to send data to LCD
-	MOVLW ' '   	 ; Load character to display	 
-    CALL lcd_data       ; Call subroutine to send data to LCD	
-    MOVLW '2'   	 ; Load character to display	 
-    CALL lcd_data       ; Call subroutine to send data to LCD
-	MOVLW 0xc0
-	CALL lcd_cmd
-	
-    ;clear digit_cursor_pos variable
-    clrf    digit_cursor_pos
-	CALL display_all_digits_2
-	CALL position_cursor        ; Position cursor at first digit
-	RETURN
+movlw 0x01
+movwf screen1         ; Set to screen 2
+call lcd_cmd
+movlw 0x0F
+call lcd_cmd
 
+MOVLW 0x80
+CALL lcd_cmd
+MOVLW 'N'
+CALL lcd_data
+MOVLW 'u'
+CALL lcd_data
+MOVLW 'm'
+CALL lcd_data
+MOVLW 'b'
+CALL lcd_data
+MOVLW 'e'
+CALL lcd_data
+MOVLW 'r'
+CALL lcd_data
+MOVLW ' '
+CALL lcd_data
+MOVLW '2'
+CALL lcd_data
+
+MOVLW 0xc0
+CALL lcd_cmd
+
+CALL display_all_digits_2
+CALL position_cursor
+RETURN
+
+show_the_second_num_fractional:
+movlw 0x01
+call lcd_cmd
+movlw 0x0F
+call lcd_cmd
+
+MOVLW 0x80
+CALL lcd_cmd
+MOVLW 'N'
+CALL lcd_data
+MOVLW 'u'
+CALL lcd_data
+MOVLW 'm'
+CALL lcd_data
+MOVLW 'b'
+CALL lcd_data
+MOVLW 'e'
+CALL lcd_data
+MOVLW 'r'
+CALL lcd_data
+MOVLW ' '
+CALL lcd_data
+MOVLW '2'
+CALL lcd_data
+MOVLW ' '
+CALL lcd_data
+MOVLW 'F'
+CALL lcd_data
+MOVLW 'R'
+CALL lcd_data
+MOVLW 'A'
+CALL lcd_data
+MOVLW 'C'
+CALL lcd_data
+
+MOVLW 0xc0
+CALL lcd_cmd
+
+CALL display_all_digits_2
+CALL position_cursor
+RETURN
+
+; NEW FEATURE: Show equals screen with "=" on the left
+show_equals_screen:
+movlw 0x01
+call lcd_cmd
+movlw 0x0C            ; Display on, cursor off (no blinking cursor needed)
+call lcd_cmd
+
+; Clear both lines first
+MOVLW 0x80
+CALL lcd_cmd
+MOVLW ' '
+CALL lcd_data
+MOVLW ' '
+CALL lcd_data
+MOVLW ' '
+CALL lcd_data
+MOVLW ' '
+CALL lcd_data
+MOVLW ' '
+CALL lcd_data
+MOVLW ' '
+CALL lcd_data
+MOVLW ' '
+CALL lcd_data
+MOVLW ' '
+CALL lcd_data
+MOVLW ' '
+CALL lcd_data
+MOVLW ' '
+CALL lcd_data
+MOVLW ' '
+CALL lcd_data
+MOVLW ' '
+CALL lcd_data
+MOVLW ' '
+CALL lcd_data
+MOVLW ' '
+CALL lcd_data
+MOVLW ' '
+CALL lcd_data
+MOVLW ' '
+CALL lcd_data
+
+MOVLW 0xc0
+CALL lcd_cmd
+MOVLW ' '
+CALL lcd_data
+MOVLW ' '
+CALL lcd_data
+MOVLW ' '
+CALL lcd_data
+MOVLW ' '
+CALL lcd_data
+MOVLW ' '
+CALL lcd_data
+MOVLW ' '
+CALL lcd_data
+MOVLW ' '
+CALL lcd_data
+MOVLW ' '
+CALL lcd_data
+MOVLW ' '
+CALL lcd_data
+MOVLW ' '
+CALL lcd_data
+MOVLW ' '
+CALL lcd_data
+MOVLW ' '
+CALL lcd_data
+MOVLW ' '
+CALL lcd_data
+MOVLW ' '
+CALL lcd_data
+MOVLW ' '
+CALL lcd_data
+MOVLW ' '
+CALL lcd_data
+
+; Position cursor at the leftmost position of first line and display equals sign
+MOVLW 0x80            ; Leftmost position of first line (position 0)
+CALL lcd_cmd
+MOVLW '='
+CALL lcd_data
+RETURN
 
 display_all_digits_1:
-  	movf    digit_array1_0, 0
-    addlw   '0'
-    call    lcd_data
-    movf    digit_array1_1, 0
-    addlw   '0'
-    call    lcd_data
-    movf    digit_array1_2, 0
-    addlw   '0'
-    call    lcd_data
-    movf    digit_array1_3, 0
-    addlw   '0'
-    call    lcd_data
-    movf    digit_array1_4, 0
-    addlw   '0'
-    call    lcd_data
-    movf    digit_array1_5, 0
-    addlw   '0'
-    call    lcd_data
-	MOVLW '.'
-	CALL lcd_data
-    movf    digit_array1_6, 0
-    addlw   '0'
-    call    lcd_data
-    movf    digit_array1_7, 0
-    addlw   '0'
-    call    lcd_data
-    movf    digit_array1_8, 0
-    addlw   '0'
-    call    lcd_data
-    movf    digit_array1_9, 0
-    addlw   '0'
-    call    lcd_data
-    movf    digit_array1_10, 0
-    addlw   '0'
-    call    lcd_data
-    movf    digit_array1_11, 0
-    addlw   '0'
-    call    lcd_data
-	MOVLW 0xc0
-	CALL lcd_cmd
-    RETURN
-
-
+movf digit_array1_0, 0
+addlw '0'
+call lcd_data
+movf digit_array1_1, 0
+addlw '0'
+call lcd_data
+movf digit_array1_2, 0
+addlw '0'
+call lcd_data
+movf digit_array1_3, 0
+addlw '0'
+call lcd_data
+movf digit_array1_4, 0
+addlw '0'
+call lcd_data
+movf digit_array1_5, 0
+addlw '0'
+call lcd_data
+MOVLW '.'
+CALL lcd_data
+movf digit_array1_6, 0
+addlw '0'
+call lcd_data
+movf digit_array1_7, 0
+addlw '0'
+call lcd_data
+movf digit_array1_8, 0
+addlw '0'
+call lcd_data
+movf digit_array1_9, 0
+addlw '0'
+call lcd_data
+movf digit_array1_10, 0
+addlw '0'
+call lcd_data
+movf digit_array1_11, 0
+addlw '0'
+call lcd_data
+RETURN
 
 display_all_digits_2:
-  	movf    digit_array2_0, 0
-    addlw   '0'
-    call    lcd_data
-    movf    digit_array2_1, 0
-    addlw   '0'
-    call    lcd_data
-    movf    digit_array2_2, 0
-    addlw   '0'
-    call    lcd_data
-    movf    digit_array2_3, 0
-    addlw   '0'
-    call    lcd_data
-    movf    digit_array2_4, 0
-    addlw   '0'
-    call    lcd_data
-    movf    digit_array2_5, 0
-    addlw   '0'
-    call    lcd_data
-	MOVLW '.'
-	CALL lcd_data
-    movf    digit_array2_6, 0
-    addlw   '0'
-    call    lcd_data
-    movf    digit_array2_7, 0
-    addlw   '0'
-    call    lcd_data
-    movf    digit_array2_8, 0
-    addlw   '0'
-    call    lcd_data
-    movf    digit_array2_9, 0
-    addlw   '0'
-    call    lcd_data
-    movf    digit_array2_10, 0
-    addlw   '0'
-    call    lcd_data
-    movf    digit_array2_11, 0
-    addlw   '0'
-    call    lcd_data
-	MOVLW 0xc0
-	CALL lcd_cmd
-    RETURN
+movf digit_array2_0, 0
+addlw '0'
+call lcd_data
+movf digit_array2_1, 0
+addlw '0'
+call lcd_data
+movf digit_array2_2, 0
+addlw '0'
+call lcd_data
+movf digit_array2_3, 0
+addlw '0'
+call lcd_data
+movf digit_array2_4, 0
+addlw '0'
+call lcd_data
+movf digit_array2_5, 0
+addlw '0'
+call lcd_data
+MOVLW '.'
+CALL lcd_data
+movf digit_array2_6, 0
+addlw '0'
+call lcd_data
+movf digit_array2_7, 0
+addlw '0'
+call lcd_data
+movf digit_array2_8, 0
+addlw '0'
+call lcd_data
+movf digit_array2_9, 0
+addlw '0'
+call lcd_data
+movf digit_array2_10, 0
+addlw '0'
+call lcd_data
+movf digit_array2_11, 0
+addlw '0'
+call lcd_data
+RETURN
 
+display_result_screen:
+call stop_main_timeout
+
+movlw 0x01
+call lcd_cmd
+movlw 0x0C
+call lcd_cmd
+
+MOVLW 0x80
+CALL lcd_cmd
+MOVLW 'R'
+CALL lcd_data
+MOVLW 'e'
+CALL lcd_data
+MOVLW 's'
+CALL lcd_data
+MOVLW 'u'
+CALL lcd_data
+MOVLW 'l'
+CALL lcd_data
+MOVLW 't'
+CALL lcd_data
+MOVLW ':'
+CALL lcd_data
+
+MOVLW 0xc0
+CALL lcd_cmd
+movf result_array_0, 0
+addlw '0'
+call lcd_data
+movf result_array_1, 0
+addlw '0'
+call lcd_data
+movf result_array_2, 0
+addlw '0'
+call lcd_data
+movf result_array_3, 0
+addlw '0'
+call lcd_data
+movf result_array_4, 0
+addlw '0'
+call lcd_data
+movf result_array_5, 0
+addlw '0'
+call lcd_data
+MOVLW '.'
+CALL lcd_data
+movf result_array_6, 0
+addlw '0'
+call lcd_data
+movf result_array_7, 0
+addlw '0'
+call lcd_data
+movf result_array_8, 0
+addlw '0'
+call lcd_data
+movf result_array_9, 0
+addlw '0'
+call lcd_data
+movf result_array_10, 0
+addlw '0'
+call lcd_data
+movf result_array_11, 0
+addlw '0'
+call lcd_data
+return
 
 position_cursor:
-    movf    digit_cursor_pos, 0
-    addlw   0xC0
-    call    lcd_cmd
-    return
+movf digit_cursor_pos, 0
+addlw 0xC0
+call lcd_cmd
+return
 
-
-;------------------------DIGIT MANIPULATION FUNCTIONS------------------------------------------------------------------------------------
-
+;----------------------------------------DIGIT MANIPULATION FUNCTIONS-------------------------------------------------------------
 increment_current_digit_1:
-    ; Get pointer to current digit using FSR (File Select Register)
-    movf    digit_cursor_pos, 0
-    ; If cursor position is 7 or higher, subtract 1 to account for skipped decimal point
-    sublw   .6                  ; Compare cursor position with 6
-    btfss   STATUS, C           ; If cursor_pos > 6 (carry clear), adjust index
-    goto    adjust_index_1
-    ; Cursor position is 0-5, use directly
-    movf    digit_cursor_pos, 0
-    addlw   digit_array1_0
-    movwf   FSR
-    goto    increment_digit_1
+movf digit_cursor_pos, 0
+sublw .6
+btfss STATUS, C
+goto adjust_index_1
+movf digit_cursor_pos, 0
+addlw digit_array1_0
+movwf FSR
+goto increment_digit_1
 adjust_index_1:
-    ; Cursor position is 7-12, map to array indices 6-11
-    movf    digit_cursor_pos, 0
-    addlw   .255                ; Subtract 1 (add -1 = add 255)
-    addlw   digit_array1_0
-    movwf   FSR
+movf digit_cursor_pos, 0
+addlw .255
+addlw digit_array1_0
+movwf FSR
 increment_digit_1:
-    ; Increment the digit (0-9 cycle)
-    incf    INDF, 1             ; Increment digit at FSR address
-    movf    INDF, 0             ; Load current value
-    sublw   .10                 ; Compare with 10
-    btfsc   STATUS, Z           ; If equal to 10
-    clrf    INDF                ; Reset to 0
-    
-    return
-
+incf INDF, 1
+movf INDF, 0
+sublw .10
+btfsc STATUS, Z
+clrf INDF
+return
 
 increment_current_digit_2:
-    ; Get pointer to current digit using FSR (File Select Register)
-    movf    digit_cursor_pos, 0
-    ; If cursor position is 7 or higher, subtract 1 to account for skipped decimal point
-    sublw   .6                  ; Compare cursor position with 6
-    btfss   STATUS, C           ; If cursor_pos > 6 (carry clear), adjust index
-    goto    adjust_index_2
-    ; Cursor position is 0-5, use directly
-    movf    digit_cursor_pos, 0
-    addlw   digit_array2_0
-    movwf   FSR
-    goto    increment_digit_2
+movf digit_cursor_pos, 0
+sublw .6
+btfss STATUS, C
+goto adjust_index_2
+movf digit_cursor_pos, 0
+addlw digit_array2_0
+movwf FSR
+goto increment_digit_2
 adjust_index_2:
-    ; Cursor position is 7-12, map to array indices 6-11
-    movf    digit_cursor_pos, 0
-    addlw   .255                ; Subtract 1 (add -1 = add 255)
-    addlw   digit_array2_0
-    movwf   FSR
+movf digit_cursor_pos, 0
+addlw .255
+addlw digit_array2_0
+movwf FSR
 increment_digit_2:
-    ; Increment the digit (0-9 cycle)
-    incf    INDF, 1             ; Increment digit at FSR address
-    movf    INDF, 0             ; Load current value
-    sublw   .10                 ; Compare with 10
-    btfsc   STATUS, Z           ; If equal to 10
-    clrf    INDF                ; Reset to 0
-    
-    return
+incf INDF, 1
+movf INDF, 0
+sublw .10
+btfsc STATUS, Z
+clrf INDF
+return
 
 update_single_digit_display_1:
-    ; Calculate LCD position for current digit
-    movf    digit_cursor_pos, 0
-    addlw   0xC0                ; Second line base address
-    call    lcd_cmd             ; Position cursor
-    
-    ; Get current digit value and display it
-    movf    digit_cursor_pos, 0
-    ; If cursor position is 7 or higher, subtract 1 to account for skipped decimal point
-    sublw   .6                  ; Compare cursor position with 6
-    btfss   STATUS, C           ; If cursor_pos > 6 (carry clear), adjust index
-    goto    adjust_display_index_1
-    ; Cursor position is 0-5, use directly
-    movf    digit_cursor_pos, 0
-    addlw   digit_array1_0
-    movwf   FSR
-    goto    display_digit_1
+movf digit_cursor_pos, 0
+addlw 0xC0
+call lcd_cmd
+movf digit_cursor_pos, 0
+sublw .6
+btfss STATUS, C
+goto adjust_display_index_1
+movf digit_cursor_pos, 0
+addlw digit_array1_0
+movwf FSR
+goto display_digit_1
 adjust_display_index_1:
-    ; Cursor position is 7-12, map to array indices 6-11
-    movf    digit_cursor_pos, 0
-    addlw   .255                ; Subtract 1 (add -1 = add 255)
-    addlw   digit_array1_0
-    movwf   FSR
+movf digit_cursor_pos, 0
+addlw .255
+addlw digit_array1_0
+movwf FSR
 display_digit_1:
-    movf    INDF, 0             ; Get digit value
-    addlw   '0'                 ; Convert to ASCII
-    call    lcd_data            ; Display the digit
-    
-    ; Reposition cursor for blinking
-    movf    digit_cursor_pos, 0
-    addlw   0xC0
-    call    lcd_cmd
-    
-    return
-
+movf INDF, 0
+addlw '0'
+call lcd_data
+movf digit_cursor_pos, 0
+addlw 0xC0
+call lcd_cmd
+return
 
 update_single_digit_display_2:
-    ; Calculate LCD position for current digit
-    movf    digit_cursor_pos, 0
-    addlw   0xC0                ; Second line base address
-    call    lcd_cmd             ; Position cursor
-    
-    ; Get current digit value and display it
-    movf    digit_cursor_pos, 0
-    ; If cursor position is 7 or higher, subtract 1 to account for skipped decimal point
-    sublw   .6                  ; Compare cursor position with 6
-    btfss   STATUS, C           ; If cursor_pos > 6 (carry clear), adjust index
-    goto    adjust_display_index_2
-    ; Cursor position is 0-5, use directly
-    movf    digit_cursor_pos, 0
-    addlw   digit_array2_0
-    movwf   FSR
-    goto    display_digit_2
+movf digit_cursor_pos, 0
+addlw 0xC0
+call lcd_cmd
+movf digit_cursor_pos, 0
+sublw .6
+btfss STATUS, C
+goto adjust_display_index_2
+movf digit_cursor_pos, 0
+addlw digit_array2_0
+movwf FSR
+goto display_digit_2
 adjust_display_index_2:
-    ; Cursor position is 7-12, map to array indices 6-11
-    movf    digit_cursor_pos, 0
-    addlw   .255                ; Subtract 1 (add -1 = add 255)
-    addlw   digit_array2_0
-    movwf   FSR
+movf digit_cursor_pos, 0
+addlw .255
+addlw digit_array2_0
+movwf FSR
 display_digit_2:
-    movf    INDF, 0             ; Get digit value
-    addlw   '0'                 ; Convert to ASCII
-    call    lcd_data            ; Display the digit
-    
-    ; Reposition cursor for blinking
-    movf    digit_cursor_pos, 0
-    addlw   0xC0
-    call    lcd_cmd
-    
-    return
+movf INDF, 0
+addlw '0'
+call lcd_data
+movf digit_cursor_pos, 0
+addlw 0xC0
+call lcd_cmd
+return
 
 debounce:
-    ; Simple debounce delay
-    movlw   .10
-    call    delay_ms
-    return
+movlw .10
+call delay_ms
+return
 
-;------------------------------------------------------------------------
-
+;----------------------------------------DELAY ROUTINES-------------------------------------------------------------
 delay_500ms:
-    movlw .250
-    call delay_ms
-    movlw .250
-    call delay_ms
-    return
+movlw .250
+call delay_ms
+movlw .250
+call delay_ms
+return
 
 delay_20ms:
-    movlw .20
-    call delay_ms
-    return
+movlw .20
+call delay_ms
+return
 
 delay_5ms:
-    movlw .5
-    call delay_ms
-    return
+movlw .5
+call delay_ms
+return
 
 delay_1ms:
-    movlw .1
-    call delay_ms
-    return
+movlw .1
+call delay_ms
+return
 
 delay_ms:
-    movwf delay_ms_count
+movwf delay_ms_count
 ms_loop:
-    movlw 0xC7
-    movwf temp_char
+movlw 0xC7
+movwf temp_char
 us_loop:
-    decfsz temp_char, 1
-    goto us_loop
-    decfsz delay_ms_count, 1
-    goto ms_loop
-    return
-
-delay_700ms:
-    ; 700ms delay using existing delay functions
-    ; 700ms = 500ms + 200ms
-    call    delay_500ms
-    movlw   .200
-    call    delay_ms
-    return
-
-delay_300ms:
-    ; 300ms delay using existing delay functions
-    ; 300ms = 250ms + 50ms
-    movlw   .250
-    call    delay_ms
-    movlw   .50
-    call    delay_ms
-    return
-
-
-
-
-done:
-    SLEEP
-    GOTO done
+decfsz temp_char, 1
+goto us_loop
+decfsz delay_ms_count, 1
+goto ms_loop
+return
 
 ;----------------------------------------USART COMMUNICATION SUBROUTINES-------------------------------------------------------------
-
 init_master_usart:
-    ; Initialize USART for 9600 baud rate communication
-    ; USART allows two PICs to communicate by sending data one byte at a time
-    ; 9600 baud = 9600 bits per second (standard speed for PIC communication)
-    
-    BANKSEL SPBRG
-    MOVLW   .25             ; Baud rate generator value for 9600 baud at 4MHz crystal
-    MOVWF   SPBRG           ; Set the communication speed
-    
-    BANKSEL TXSTA
-    BCF     TXSTA, SYNC     ; Use asynchronous mode (no clock signal needed)
-    BSF     TXSTA, TXEN     ; Enable the transmitter hardware
-    
-    BANKSEL RCSTA  
-    BSF     RCSTA, SPEN     ; Enable the serial port hardware
-    
-    RETURN
+BANKSEL SPBRG
+MOVLW .25
+MOVWF SPBRG
+BANKSEL TXSTA
+BCF TXSTA, SYNC
+BSF TXSTA, TXEN
+BANKSEL RCSTA
+BSF RCSTA, SPEN
+BSF RCSTA, CREN
+RETURN
 
 show_the_second_num_and_transmit:
-    ; This function does two things:
-    ; 1. Shows the second number input screen
-    ; 2. Transmits the first number to slave PIC via USART
-    
-    ; First, check if we haven't transmitted the first number yet
-    MOVF    number_transmitted, 0
-    SUBLW   .0                      ; Check if number_transmitted == 0
-    BTFSS   STATUS, Z               ; If not zero, skip transmission
-    GOTO    just_show_second_num    ; Already transmitted, just show second number
-    
-    ; Transmit the first number to slave PIC
-    CALL    transmit_first_number_to_slave
-    
-    ; Mark that we've transmitted the first number
-    MOVLW   .1
-    MOVWF   number_transmitted
-    
+MOVF number_transmitted, 0
+SUBLW .0
+BTFSS STATUS, Z
+GOTO just_show_second_num
+CALL transmit_first_number_to_slave
+MOVLW .1
+MOVWF number_transmitted
 just_show_second_num:
-    CALL    show_the_second_num     ; Show the second number input screen
-    RETURN
+CALL show_the_second_num
+RETURN
 
 transmit_first_number_to_slave:
-    ; This function sends all 12 digits of the first number to the slave PIC
-    ; Each digit is sent as a separate byte through USART
-    
-    CLRF    transmit_index          ; Start from first digit (index 0)
-    
+CLRF transmit_index
 transmit_loop:
-    ; Get the current digit to transmit using indirect addressing
-    MOVF    transmit_index, 0
-    ADDLW   digit_array1_0          ; Calculate address of digit
-    MOVWF   FSR                     ; Point FSR to the digit
-    MOVF    INDF, 0                 ; Get the digit value (0-9)
-    
-    ; Send this digit to slave PIC
-    CALL    usart_send_byte
-    
-    ; Small delay between transmissions to ensure slave can process
-    CALL    delay_5ms
-    
-    ; Move to next digit
-    INCF    transmit_index, 1
-    
-    ; Check if we sent all 12 digits
-    MOVF    transmit_index, 0
-    SUBLW   .12                     ; Compare with 12
-    BTFSS   STATUS, Z               ; If not equal to 12, continue
-    GOTO    transmit_loop           ; Send next digit
-    
-    RETURN
+MOVF transmit_index, 0
+ADDLW digit_array1_0
+MOVWF FSR
+MOVF INDF, 0
+CALL usart_send_byte
+CALL delay_5ms
+INCF transmit_index, 1
+MOVF transmit_index, 0
+SUBLW .12
+BTFSS STATUS, Z
+GOTO transmit_loop
+RETURN
 
 transmit_second_number_to_slave:
-    ; This function sends all 12 digits of the second number to the slave PIC
-    ; Each digit is sent as a separate byte through USART
-    
-    CLRF    transmit_index          ; Start from first digit (index 0)
-    
+CLRF transmit_index
 transmit_loop_2:
-    ; Get the current digit to transmit using indirect addressing
-    MOVF    transmit_index, 0
-    ADDLW   digit_array2_0          ; Calculate address of digit from second array
-    MOVWF   FSR                     ; Point FSR to the digit
-    MOVF    INDF, 0                 ; Get the digit value (0-9)
-    
-    ; Send this digit to slave PIC
-    CALL    usart_send_byte
-    
-    ; Small delay between transmissions to ensure slave can process
-    CALL    delay_5ms
-    
-    ; Move to next digit
-    INCF    transmit_index, 1
-    
-    ; Check if we sent all 12 digits
-    MOVF    transmit_index, 0
-    SUBLW   .12                     ; Compare with 12
-    BTFSS   STATUS, Z               ; If not equal to 12, continue
-    GOTO    transmit_loop_2         ; Send next digit
-    
-    RETURN
+MOVF transmit_index, 0
+ADDLW digit_array2_0
+MOVWF FSR
+MOVF INDF, 0
+CALL usart_send_byte
+CALL delay_5ms
+INCF transmit_index, 1
+MOVF transmit_index, 0
+SUBLW .12
+BTFSS STATUS, Z
+GOTO transmit_loop_2
+RETURN
+
+receive_result_from_slave:
+CLRF transmit_index
+receive_loop:
+CALL usart_receive_byte
+MOVF transmit_index, 0
+ADDLW result_array_0
+MOVWF FSR
+MOVWF INDF
+INCF transmit_index, 1
+MOVF transmit_index, 0
+SUBLW .12
+BTFSS STATUS, Z
+GOTO receive_loop
+RETURN
 
 usart_send_byte:
-    ; This function sends one byte (the digit in W register) to slave PIC
-    ; W register contains the digit value (0-9) to send
-    
-    BANKSEL TXSTA
-    BTFSS   TXSTA, TRMT            ; Check if transmit register is empty
-    GOTO    $-1                    ; Wait until transmit register is empty
-    
-    BANKSEL TXREG
-    MOVWF   TXREG                  ; Put the digit into transmit register
-                                   ; Hardware automatically sends it to slave PIC
-    
-    RETURN
+BANKSEL TXSTA
+BTFSS TXSTA, TRMT
+GOTO $-1
+BANKSEL TXREG
+MOVWF TXREG
+RETURN
 
-;------------------------------------------------------------------------
+usart_receive_byte:
+BANKSEL PIR1
+BTFSS PIR1, RCIF
+GOTO $-1
+BANKSEL RCREG
+MOVF RCREG, 0
+RETURN
+
+INCLUDE "LCDIS.INC"
 END
