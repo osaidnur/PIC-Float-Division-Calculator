@@ -1,17 +1,10 @@
 /Project Backups
-Project_4.pdsprj.ASUS-TUF-OSAID.Osaid.workspace
-myproject.cof
-myproject.map
-project.err
-Project.lst
-project.o
-project.mcs
-myproject.mcs
-myproject.mcw
-pic2.err
-pic2.lst
-pic2.o
-slave.cof
-slave.map
-myproject.mcw
-slave.mcw
+*.workspace
+*.cof
+*.map
+*.err
+*.lst
+*.o
+*.mcs
+*.mcs
+*.mcw
