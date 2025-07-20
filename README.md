@@ -271,7 +271,7 @@ perform_18x12_division:
 
 The division algorithm implements a sophisticated **decimal long division** process designed for high-precision floating-point arithmetic:
 
-##### 📊 **Data Structure & Scaling**
+#### 📊 **Data Structure & Scaling**
 ```assembly
 ; Input: 12-digit numbers (NNNNNN.DDDDDD format)
 ; Dividend scaling: 12 → 18 digits (shift left by 6 decimal places)
@@ -279,7 +279,7 @@ The division algorithm implements a sophisticated **decimal long division** proc
 ; Final quotient: 12 digits (6.6 fixed-point format)
 ```
 
-##### 🔄 **Algorithm Flow**
+#### 🔄 **Algorithm Flow**
 
 1. **Input Preparation**:
    - Copy 12-digit dividend to upper 12 positions of 18-digit array
@@ -302,7 +302,7 @@ The division algorithm implements a sophisticated **decimal long division** proc
    - Last 12 iterations: Generate quotient digits
    - Skip first 5 quotient positions to maintain 6.6 format
 
-##### 🧮 **Core Operations**
+#### 🧮 **Core Operations**
 
 **Multi-Digit Comparison** (`compare_13x12_numbers`):
 ```assembly
@@ -326,7 +326,7 @@ The division algorithm implements a sophisticated **decimal long division** proc
 ; Converts negative digits to positive with borrow from next position
 ```
 
-##### 📈 **Example Calculation**
+#### 📈 **Example Calculation**
 ```
 Input: 123456.789012 ÷ 2.000000
 1. Scale dividend: 123456.789012 → 123456789012.000000 (18 digits)
