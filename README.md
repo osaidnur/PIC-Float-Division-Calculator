@@ -110,8 +110,8 @@ This project implements a **complex floating-point division calculator** using t
 
 | Pull-up Resistors | Capacitors (15pF) | Proteus Simulation | Complete Circuit |
 |:-----------------:|:------------------:|:------------------:|:----------------:|
-| ![Resistors](images/resistors.jpg) | ![Capacitors](images/capacitors.jpg) | ![Proteus](images/proteus-simulation.jpg) | ![Complete Circuit](images/complete-circuit.jpg) |
-| *4.7KΩ & 10KΩ values* | *Crystal oscillator caps* | *Design environment* | *Final hardware layout* |
+| ![Resistors](images/resistors.jpg) | ![Capacitors](images/capacitors.jpg) | ![Complete Circuit](images/complete-circuit.jpg) |
+| *4.7KΩ & 10KΩ values* | *Crystal oscillator caps* | *Final hardware layout* |
 
 </div>
 
