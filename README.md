@@ -435,7 +435,6 @@ PIC-Float-Division-Calculator/
 ### 🤝 Team Collaboration Stats
 
 ![Contributors](https://img.shields.io/badge/Contributors-4-brightgreen?style=for-the-badge)
-![Commits](https://img.shields.io/badge/Total%20Commits-150+-blue?style=for-the-badge)
 ![Code Lines](https://img.shields.io/badge/Lines%20of%20Code-1700+-orange?style=for-the-badge)
 
 </div>
