@@ -342,14 +342,6 @@ perform_18x12_division:
 
 <div align="center">
 
-#### Calculation Process
-![Calculation](images/calculation.png)
-*Master-slave communication during division*
-
-</div>
-
-<div align="center">
-
 #### Result Display
 ![Result Display](images/result-display.png)
 *Final result with formatting*
