@@ -243,6 +243,7 @@ transmit_loop:
     GOTO    transmit_loop
     RETURN
 ```
+---
 
 ### ⚙️ Slave CPU Functions
 
@@ -263,6 +264,8 @@ perform_18x12_division:
 - **Multi-digit Comparison**: 13×12 number comparison
 - **Multi-digit Subtraction**: With borrow propagation
 - **Fixed-Point Conversion**: Integer to 6.6 format
+
+--- 
 
 ### 🔬 Detailed Division Mechanism
 
