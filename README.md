@@ -29,9 +29,7 @@
 - [📁 Project Structure](#-project-structure)
 - [🔬 Technical Specifications](#-technical-specifications)
 - [👥 Contributors](#-contributors)
-- [🤝 Contributing](#-contributing)
 - [📜 License](#-license)
-- [🙏 Acknowledgments](#-acknowledgments)
 
 ---
 
@@ -455,35 +453,9 @@ PIC-Float-Division-Calculator/
 
 ---
 
-## 🤝 Contributing
-
-We welcome contributions! Please see our contributing guidelines:
-
-1. **Fork** the repository
-2. **Create** a feature branch
-3. **Commit** your changes
-4. **Push** to the branch
-5. **Create** a Pull Request
-
-### 📧 Contact
-- **Author**: Osaid Nur
-- **Email**: [your-email@example.com]
-- **GitHub**: [@osaidnur](https://github.com/osaidnur)
-
----
-
 ## 📜 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
----
-
-## 🙏 Acknowledgments
-
-- **Microchip Technology** for PIC16F877A documentation
-- **Proteus Design Suite** for simulation environment
-- **MPLAB IDE** for development tools
-- **Assembly Language Community** for code optimization techniques
 
 ---
 
