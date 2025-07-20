@@ -112,7 +112,7 @@ This project implements a **complex floating-point division calculator** using t
 
 | Pull-up Resistors | Capacitors (15pF) |
 |:-----------------:|:------------------:|
-| ![Resistors](images/resistors.jpg) | ![Capacitors](images/capacitors.jpg) |
+| ![Resistors](images/resistors.jpg) | ![Capacitors](images/capacitors.png) |
 | *4.7KΩ & 10KΩ values* | *Crystal oscillator caps* |
 
 #### 🔌 Complete Circuit Design
@@ -416,10 +416,6 @@ PIC-Float-Division-Calculator/
 <br />
 <b>Ahmad Hussin</b>
 </a>
-<br />
-<sub>Master CPU Development</sub>
-<br />
-<sub>🎯 LCD Interface & Input Handling</sub>
 </td>
 <td align="center" width="25%">
 <a href="https://github.com/SuperMoathx7">
@@ -427,10 +423,6 @@ PIC-Float-Division-Calculator/
 <br />
 <b>Moath Wajeeh</b>
 </a>
-<br />
-<sub>Slave CPU Development</sub>
-<br />
-<sub>🧮 Division Algorithm Implementation</sub>
 </td>
 <td align="center" width="25%">
 <a href="https://github.com/MoaidKarakra">
@@ -438,10 +430,6 @@ PIC-Float-Division-Calculator/
 <br />
 <b>Moaid Karakra</b>
 </a>
-<br />
-<sub>Hardware Design</sub>
-<br />
-<sub>🔌 Proteus Simulation & Circuit Design</sub>
 </td>
 <td align="center" width="25%">
 <a href="https://github.com/osaidnur">
@@ -449,10 +437,6 @@ PIC-Float-Division-Calculator/
 <br />
 <b>Osaid Nur</b>
 </a>
-<br />
-<sub>Testing & Documentation</sub>
-<br />
-<sub>📚 System Integration & Quality Assurance</sub>
 </td>
 </tr>
 </table>
