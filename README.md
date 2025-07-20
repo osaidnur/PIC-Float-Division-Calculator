@@ -412,28 +412,28 @@ PIC-Float-Division-Calculator/
 <tr>
 <td align="center" width="25%">
 <a href="https://github.com/3ahma">
-<img src="https://github.com/3ahma.png" width="100px" height="100px" style="border-radius: 50%; border: 3px solid #4CAF50;"/>
+<img src="https://github.com/3ahma.png" width="130px" height="130px" style="border-radius: 50%; border: 3px solid #4CAF50;"/>
 <br />
 <b>Ahmad Hussin</b>
 </a>
 </td>
 <td align="center" width="25%">
 <a href="https://github.com/SuperMoathx7">
-<img src="https://github.com/SuperMoathx7.png" width="100px" height="100px" style="border-radius: 50%; border: 3px solid #2196F3;"/>
+<img src="https://github.com/SuperMoathx7.png" width="130px" height="130px" style="border-radius: 50%; border: 3px solid #2196F3;"/>
 <br />
 <b>Moath Wajeeh</b>
 </a>
 </td>
 <td align="center" width="25%">
 <a href="https://github.com/MoaidKarakra">
-<img src="https://github.com/MoaidKarakra.png" width="100px" height="100px" style="border-radius: 50%; border: 3px solid #FF9800;"/>
+<img src="https://github.com/MoaidKarakra.png" width="130px" height="130px" style="border-radius: 50%; border: 3px solid #FF9800;"/>
 <br />
 <b>Moaid Karakra</b>
 </a>
 </td>
 <td align="center" width="25%">
 <a href="https://github.com/osaidnur">
-<img src="https://github.com/osaidnur.png" width="100px" height="100px" style="border-radius: 50%; border: 3px solid #9C27B0;"/>
+<img src="https://github.com/osaidnur.png" width="130px" height="130px" style="border-radius: 50%; border: 3px solid #9C27B0;"/>
 <br />
 <b>Osaid Nur</b>
 </a>
