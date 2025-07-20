@@ -23,6 +23,7 @@
 - [💻 Software Architecture](#-software-architecture)
   - [🎛️ Master CPU Functions](#️-master-cpu-functions)
   - [⚙️ Slave CPU Functions](#️-slave-cpu-functions)
+  - [🔬 Detailed Division Mechanism](#-detailed-division-mechanism)
 - [🛠️ Development Environment](#️-development-environment)
 - [🎮 Usage Instructions](#-usage-instructions)
 - [🎬 Demonstration](#-demonstration)
@@ -262,6 +263,80 @@ perform_18x12_division:
 - **Multi-digit Comparison**: 13×12 number comparison
 - **Multi-digit Subtraction**: With borrow propagation
 - **Fixed-Point Conversion**: Integer to 6.6 format
+
+### 🔬 Detailed Division Mechanism
+
+The division algorithm implements a sophisticated **decimal long division** process designed for high-precision floating-point arithmetic:
+
+##### 📊 **Data Structure & Scaling**
+```assembly
+; Input: 12-digit numbers (NNNNNN.DDDDDD format)
+; Dividend scaling: 12 → 18 digits (shift left by 6 decimal places)
+; Working remainder: 13 digits for overflow handling
+; Final quotient: 12 digits (6.6 fixed-point format)
+```
+
+##### 🔄 **Algorithm Flow**
+
+1. **Input Preparation**:
+   - Copy 12-digit dividend to upper 12 positions of 18-digit array
+   - Clear lower 6 positions (equivalent to multiplying by 10^6)
+   - Initialize 13-digit working remainder to zero
+   - Set up quotient storage for 12 digits
+
+2. **Iterative Division Process**:
+   ```assembly
+   FOR each of 18 dividend digits:
+       1. Shift working remainder left by 1 decimal place
+       2. Bring down next dividend digit
+       3. Count how many times divisor fits into current remainder
+       4. Store count as quotient digit (if in quotient range)
+       5. Subtract (count × divisor) from remainder
+   ```
+
+3. **Precision Control**:
+   - First 6 iterations: Build integer part of quotient
+   - Last 12 iterations: Generate quotient digits
+   - Skip first 5 quotient positions to maintain 6.6 format
+
+##### 🧮 **Core Operations**
+
+**Multi-Digit Comparison** (`compare_13x12_numbers`):
+```assembly
+; Compares 13-digit working remainder with 12-digit divisor
+; Returns: div_compare_result = 1 if remainder ≥ divisor
+; Handles digit-by-digit comparison from MSB to LSB
+```
+
+**Multi-Digit Subtraction** (`subtract_13x12_numbers`):
+```assembly
+; Performs remainder = remainder - divisor
+; Implements decimal borrow propagation
+; Uses ripple-borrow routines (b_f_h_d_x) for carry handling
+```
+
+**Borrow Propagation System**:
+```assembly
+; Example: b_f_h_d_0 through b_f_h_d_11
+; Each routine handles borrow from current digit to next higher digit
+; Implements fall-through logic for cascading borrows
+; Converts negative digits to positive with borrow from next position
+```
+
+##### 📈 **Example Calculation**
+```
+Input: 123456.789012 ÷ 2.000000
+1. Scale dividend: 123456.789012 → 123456789012.000000 (18 digits)
+2. Divisor remains: 2.000000 (12 digits as: 2000000000000)
+3. Division produces: 61728.394506 (6.6 format)
+4. Result transmitted as 12 bytes: [0,6,1,7,2,8,3,9,4,5,0,6]
+```
+
+##### ⚡ **Performance Characteristics**
+- **Time Complexity**: O(18 × 12) = O(216) elementary operations
+- **Space Complexity**: 43 bytes for division variables
+- **Precision**: Maintains 6 decimal places throughout calculation
+- **Range**: Handles dividends up to 999999.999999
 
 ---
 
