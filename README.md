@@ -108,8 +108,8 @@ This project implements a **complex floating-point division calculator** using t
 | ![PIC16F877A](images/pic16f877a.jpg) | ![LCD 16x2](images/lcd-16x2.jpg) | ![Push Button](images/push-button.jpg) | ![Crystal 4MHz](images/crystal-4mhz.jpg) |
 | *Main processing unit* | *User interface display* | *Input interface* | *System clock source* |
 
-| Pull-up Resistors | Capacitors (15pF) | Proteus Simulation | Complete Circuit |
-|:-----------------:|:------------------:|:------------------:|:----------------:|
+| Pull-up Resistors | Capacitors (15pF) | Proteus Simulation |
+|:-----------------:|:------------------:|:------------------:|
 | ![Resistors](images/resistors.jpg) | ![Capacitors](images/capacitors.jpg) | ![Complete Circuit](images/complete-circuit.jpg) |
 | *4.7KΩ & 10KΩ values* | *Crystal oscillator caps* | *Final hardware layout* |
 
