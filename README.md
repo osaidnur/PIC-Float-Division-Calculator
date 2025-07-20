@@ -335,11 +335,6 @@ Input: 123456.789012 ÷ 2.000000
 4. Result transmitted as 12 bytes: [0,6,1,7,2,8,3,9,4,5,0,6]
 ```
 
-##### ⚡ **Performance Characteristics**
-- **Time Complexity**: O(18 × 12) = O(216) elementary operations
-- **Space Complexity**: 43 bytes for division variables
-- **Precision**: Maintains 6 decimal places throughout calculation
-- **Range**: Handles dividends up to 999999.999999
 
 ---
 
@@ -463,7 +458,10 @@ PIC-Float-Division-Calculator/
 - **Memory Usage**: ~80% of available RAM
 
 ### 🎯 Algorithm Complexity
-- **Division Algorithm**: O(n×m) where n=18, m=12
+- **Time Complexity**: O(n×m) = O(18 × 12) =  = O(216) elementary operations
+- **Space Complexity**: 43 bytes for division variables
+- **Precision**: Maintains 6 decimal places throughout calculation
+- **Range**: Handles dividends up to 999999.999999
 - **Decimal Operations**: BCD-like digit manipulation
 - **Communication**: Interrupt-driven for efficiency
 
