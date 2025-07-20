@@ -316,9 +316,8 @@ perform_18x12_division:
 ## 🎬 Demonstration
 
 ### 📹 Simulation Video
-> **[📺 Watch Simulation Demo](simulation-demo.mp4)**
-> 
-> *Complete demonstration showing number entry, calculation, and result display*
+
+https://github.com/user-attachments/assets/a406bb8e-a80e-4f90-ab42-e95648b59f9b
 
 ### 📸 Screenshots
 
