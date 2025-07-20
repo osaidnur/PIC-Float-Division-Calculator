@@ -6,8 +6,6 @@
 ![Microcontroller](https://img.shields.io/badge/MCU-16F877A-green?style=for-the-badge)
 ![Simulation](https://img.shields.io/badge/Simulation-Proteus-orange?style=for-the-badge)
 
-*A sophisticated dual-microcontroller floating-point division calculator using PIC16F877A assembly programming*
-
 </div>
 
 ---
@@ -401,10 +399,10 @@ PIC-Float-Division-Calculator/
 <table>
 <tr>
 <td align="center" width="25%">
-<a href="https://github.com/contributor1">
-<img src="https://github.com/contributor1.png" width="100px" height="100px" style="border-radius: 50%; border: 3px solid #4CAF50;"/>
+<a href="https://github.com/3ahma">
+<img src="https://github.com/3ahma.png" width="100px" height="100px" style="border-radius: 50%; border: 3px solid #4CAF50;"/>
 <br />
-<b>Contributor 1</b>
+<b>Ahmad Hussin</b>
 </a>
 <br />
 <sub>Master CPU Development</sub>
@@ -412,10 +410,10 @@ PIC-Float-Division-Calculator/
 <sub>🎯 LCD Interface & Input Handling</sub>
 </td>
 <td align="center" width="25%">
-<a href="https://github.com/contributor2">
-<img src="https://github.com/contributor2.png" width="100px" height="100px" style="border-radius: 50%; border: 3px solid #2196F3;"/>
+<a href="https://github.com/SuperMoathx7">
+<img src="https://github.com/SuperMoathx7.png" width="100px" height="100px" style="border-radius: 50%; border: 3px solid #2196F3;"/>
 <br />
-<b>Contributor 2</b>
+<b>Moath Wajeeh</b>
 </a>
 <br />
 <sub>Slave CPU Development</sub>
@@ -423,10 +421,10 @@ PIC-Float-Division-Calculator/
 <sub>🧮 Division Algorithm Implementation</sub>
 </td>
 <td align="center" width="25%">
-<a href="https://github.com/contributor3">
-<img src="https://github.com/contributor3.png" width="100px" height="100px" style="border-radius: 50%; border: 3px solid #FF9800;"/>
+<a href="https://github.com/MoaidKarakra">
+<img src="https://github.com/MoaidKarakra.png" width="100px" height="100px" style="border-radius: 50%; border: 3px solid #FF9800;"/>
 <br />
-<b>Contributor 3</b>
+<b>Moaid Karakra</b>
 </a>
 <br />
 <sub>Hardware Design</sub>
@@ -434,10 +432,10 @@ PIC-Float-Division-Calculator/
 <sub>🔌 Proteus Simulation & Circuit Design</sub>
 </td>
 <td align="center" width="25%">
-<a href="https://github.com/contributor4">
-<img src="https://github.com/contributor4.png" width="100px" height="100px" style="border-radius: 50%; border: 3px solid #9C27B0;"/>
+<a href="https://github.com/osaidnur">
+<img src="https://github.com/osaidnur.png" width="100px" height="100px" style="border-radius: 50%; border: 3px solid #9C27B0;"/>
 <br />
-<b>Contributor 4</b>
+<b>Osaid Nur</b>
 </a>
 <br />
 <sub>Testing & Documentation</sub>
